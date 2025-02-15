@@ -32,7 +32,9 @@ jobs:
       - name: Create .env file
         run: |
           echo "${{ secrets.DOTENV_FILE }}" > .env
-          
+          ls -l
+          cat .env
+
       # 5) Build and tag Docker image
       - name: Build Docker image
         run: |
