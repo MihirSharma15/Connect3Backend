@@ -1,0 +1,68 @@
+name: Build and Deploy to EC2 Instance
+
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1) Check out your code
+      - name: Check out repo
+        uses: actions/checkout@v3
+
+      # 2) Set up AWS credentials (from GitHub Secrets)
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      # 3) Log in to Amazon ECR
+      - name: Log in to Amazon ECR
+        run: |
+          aws ecr get-login-password --region ${{ secrets.AWS_REGION }} \
+            | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
+
+      # 4) Build and tag Docker image
+      - name: Build Docker image
+        run: |
+          # OPTIONAL: define an image tag, e.g. the short Git commit SHA or 'latest'
+          IMAGE_TAG=${GITHUB_SHA::7} 
+          
+          # Build image from Dockerfile in the root (adjust if your Dockerfile is elsewhere)
+          docker build -t connect3v3:$IMAGE_TAG .
+          
+          # Tag for ECR
+          docker tag connect3v3:$IMAGE_TAG ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPOSITORY }}:$IMAGE_TAG
+          docker tag connect3v3:$IMAGE_TAG ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPOSITORY }}:latest  # optional 'latest' tag
+
+      # 5) Push the image to ECR
+      - name: Push to ECR
+        run: |
+          IMAGE_TAG=${GITHUB_SHA::7}
+          docker push ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPOSITORY }}:$IMAGE_TAG
+          docker push ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPOSITORY }}:latest
+
+      # 6) SSH into EC2, pull the new image, and run it
+      - name: Deploy to EC2
+        run: |
+          # Write our SSH key to a file
+          echo "${{ secrets.EC2_SSH_KEY }}" > ec2_key.pem
+          chmod 400 ec2_key.pem
+
+          # OPTIONAL: If your EC2 instance needs to log in to ECR:
+          # Ensure it can run `aws` commands or has the correct IAM role
+
+          # SSH in and run commands
+          ssh -o StrictHostKeyChecking=no -i ec2_key.pem ec2-user@${{ secrets.EC2_PUBLIC_IP }} " \
+            aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }} \
+            && docker pull ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPOSITORY }}:latest \
+            && docker stop connect3v3 || true \
+            && docker rm connect3v3 || true \
+            && docker run -d -p 80:8080 --name connect3v3 ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPOSITORY }}:latest \
+          "
