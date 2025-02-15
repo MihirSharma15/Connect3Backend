@@ -1,6 +1,5 @@
 name: Build and Deploy to EC2 Instance
 
-
 on:
   push:
     branches: [ "main" ]
@@ -65,11 +64,18 @@ jobs:
           # OPTIONAL: If your EC2 instance needs to log in to ECR:
           # Ensure it can run `aws` commands or has the correct IAM role
 
+          scp -o StrictHostKeyChecking=no -i ec2_key.pem .env ec2-user@${{ secrets.EC2_PUBLIC_IP }}:/home/ec2-user/.env
+
           # SSH in and run commands
-          ssh -o StrictHostKeyChecking=no -i ec2_key.pem ec2-user@${{ secrets.EC2_PUBLIC_IP }} " \
-            aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }} \
+          ssh -o StrictHostKeyChecking=no -i ec2_key.pem ec2-user@${{ secrets.EC2_PUBLIC_IP }} "\
+            aws ecr get-login-password --region ${{ secrets.AWS_REGION }} \
+              | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }} \
             && docker pull ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPOSITORY }}:latest \
             && docker stop connect3v3 || true \
             && docker rm connect3v3 || true \
-            && docker run -d --env-file .env -p 80:8080 --name connect3v3 ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPOSITORY }}:latest \
+            && docker run -d \
+               --env-file /home/ec2-user/.env \
+               -p 80:8080 \
+               --name connect3v3 \
+               ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPOSITORY }}:latest \
           "
