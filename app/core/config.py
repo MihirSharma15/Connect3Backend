@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     TWILIO_AUTH_TOKEN: str
     TWILIO_PHONEAUTH_SERVICE_SID: str
 
-    model_config = SettingsConfigDict(env_file="app/.env")
+    model_config = SettingsConfigDict(env_file=".env")
 
 
 settings = Settings()

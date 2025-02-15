@@ -28,7 +28,12 @@ jobs:
           aws ecr get-login-password --region ${{ secrets.AWS_REGION }} \
             | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
 
-      # 4) Build and tag Docker image
+      # 4) Create .env file
+      - name: Create .env file
+        run: |
+          echo "${{ secrets.DOTENV_FILE }}" > .env
+          
+      # 5) Build and tag Docker image
       - name: Build Docker image
         run: |
           # OPTIONAL: define an image tag, e.g. the short Git commit SHA or 'latest'
@@ -41,14 +46,14 @@ jobs:
           docker tag connect3v3:$IMAGE_TAG ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPOSITORY }}:$IMAGE_TAG
           docker tag connect3v3:$IMAGE_TAG ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPOSITORY }}:latest  # optional 'latest' tag
 
-      # 5) Push the image to ECR
+      # 6) Push the image to ECR
       - name: Push to ECR
         run: |
           IMAGE_TAG=${GITHUB_SHA::7}
           docker push ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPOSITORY }}:$IMAGE_TAG
           docker push ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPOSITORY }}:latest
 
-      # 6) SSH into EC2, pull the new image, and run it
+      # 7) SSH into EC2, pull the new image, and run it
       - name: Deploy to EC2
         run: |
           # Write our SSH key to a file
@@ -64,5 +69,5 @@ jobs:
             && docker pull ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPOSITORY }}:latest \
             && docker stop connect3v3 || true \
             && docker rm connect3v3 || true \
-            && docker run -d -p 80:8080 --name connect3v3 ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPOSITORY }}:latest \
+            && docker run -d --env-file .env -p 80:8080 --name connect3v3 ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPOSITORY }}:latest \
           "
