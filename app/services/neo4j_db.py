@@ -12,6 +12,7 @@ from typing import Optional
 from functools import lru_cache
 # internal 
 from app.schemas.users import BaseUser, MinimalUser, UserConnections, UserInDb, UserPhonenumber
+from app.schemas.usphonenumber import USPhoneNumber
 
 # HELPER METHODS
 @lru_cache
@@ -30,52 +31,94 @@ def get_neo4j_session(request: Request):
     return request.app.state.neo4j_session
 
 # DB METHODS
+
 async def create_user_in_db(user: BaseUser, session: Session) -> UserInDb:
     """
-    Create a user in the database.
-    Returns the user node properties (including a newly generated user_id).
+    Create or update a user in the database based on phone number.
+
+    Rules:
+    1) If user.name and user.hashed_password are both null/None:
+       - name = ""
+       - hashed_password = ""
+       - is_verified = False
+    2) If user.name and user.hashed_password are non-empty:
+       - is_verified = True
+       - If phone number exists, update it; otherwise create a new node.
     """
-    check_for_user = await get_user_in_db(user.phonenumber, session=session)
-    # user already in db
-    if check_for_user:
-        raise ValueError
-    query = """
-    CREATE (u:User {
-        user_id: randomUUID(),
-        name: $name,
-        phonenumber: $phonenumber,
-        hashed_password: $hashed_password, 
-        created_at: $created_at,
-        remaining_connections: $remaining_connections
-    })
-    RETURN u
-    """
+
+    # Normalize name & password
+    name = user.name if user.name else ""
+    hashed_password = user.hashed_password if user.hashed_password else ""
+    # If both name and hashed_password are non-empty => verified user
+    # Otherwise => unverified
+    is_verified = bool(name and hashed_password)
+    # Check if a user with this phone number already exists
+    existing_user = await get_user_in_db(user.phonenumber, session=session)
+
+    if existing_user and existing_user.is_verified:
+        # User already exists and is verified, so we can't update it
+        raise HTTPException(
+            status_code=400,
+            detail="User already exists and is verified")
+    elif existing_user and not existing_user.is_verified and is_verified:
+        # Update the existing user node
+        query = """
+        MATCH (u:User {phonenumber: $phonenumber})
+        SET u.name = $name,
+            u.hashed_password = $hashed_password,
+            u.is_verified = $is_verified
+        RETURN u
+        """
+    elif existing_user and not existing_user.is_verified and not is_verified:
+        raise HTTPException(
+            status_code=400,
+            detail="User already exists but is not verified. Cannot update with incomplete data."
+        )
+    else:
+        # Create a new user node
+        query = """
+        CREATE (u:User {
+            user_id: randomUUID(),
+            name: $name,
+            phonenumber: $phonenumber,
+            hashed_password: $hashed_password,
+            created_at: $created_at,
+            remaining_connections: $remaining_connections,
+            is_verified: $is_verified
+        })
+        RETURN u
+        """
+
     params = {
-        "name": user.name,
-        # Convert phone number to string in case it's stored as a specialized type
+        "name": name,
         "phonenumber": str(user.phonenumber),
-        "hashed_password": user.hashed_password,
+        "hashed_password": hashed_password,
+        "is_verified": is_verified,
         "created_at": str(datetime.datetime.now()),
         "remaining_connections": 3
     }
-    
+
     result = session.run(query, **params)
     record = result.single()
+
     if record is None:
         raise HTTPException(
             status_code=500,
-            detail="Failed to create user in DB."
+            detail="Failed to create/update user in DB."
         )
     
     node = record["u"]
-    # Convert the node's properties into a dict or a Pydantic model
-    created_user = UserInDb(user_id=node["user_id"], 
-                            name=node["name"], 
-                            phonenumber=node["phonenumber"], 
-                            hashed_password=node["hashed_password"],
-                            created_at=node["created_at"],
-                            remaining_connections=int(node["remaining_connections"])
-                            )
+    # Safely convert node properties to a UserInDb
+    created_user = UserInDb(
+        user_id=node["user_id"],
+        name=node.get("name", ""),
+        phonenumber=node["phonenumber"],
+        hashed_password=node.get("hashed_password", ""),
+        created_at=node.get("created_at", ""),
+        remaining_connections=int(node.get("remaining_connections", 0)),
+        is_verified=node.get("is_verified", False)
+    )
+
     return created_user
 
 async def get_user_in_db(phonenumber: str, session: Session) -> Optional[UserInDb]:
@@ -103,7 +146,8 @@ async def get_user_in_db(phonenumber: str, session: Session) -> Optional[UserInD
         phonenumber=node["phonenumber"],
         hashed_password=node["hashed_password"],
         created_at=node["created_at"],
-        remaining_connections=node["remaining_connections"]
+        remaining_connections=node["remaining_connections"],
+        is_verified=node["is_verified"]
     )
     return found_user
 

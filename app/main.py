@@ -47,11 +47,11 @@ app.add_middleware(
 app.include_router(user_router)
 app.include_router(auth_router)
 
-@app.get("/")
+@app.get("/", status_code=200)
 async def root():
     return {"message": "Welcome to Connect3, a social network for UNC students"}
 
-@app.get("/health")
+@app.get("/health", status_code=200)
 async def health(db: Annotated[GraphDatabase, Depends(get_neo4j_driver)]):
     try:
         db.verify_connectivity()

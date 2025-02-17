@@ -1,19 +1,15 @@
 from pydantic import BaseModel, Field
 from pydantic_extra_types.phone_numbers import PhoneNumber
-from typing import List
+from typing import List, Optional
 
 # internal
 from app.schemas.auth import Token
 from app.schemas.usphonenumber import USPhoneNumber
-
-# PhoneNumber Type SETS THE DEFAULT TYPE TO BE OF US and the formating!!
-PhoneNumber.default_region_code = "US"
-PhoneNumber.phone_format = "E164"
 class BaseUser(BaseModel):
     # base model for users 
-    name: str
+    name: Optional[str] = str
     phonenumber: USPhoneNumber
-    hashed_password: str
+    hashed_password: Optional[str] = str
 
 class UserPhonenumber(BaseModel):
     """Just a User's phonenumber"""
@@ -43,6 +39,7 @@ class UserInDb(BaseModel):
     hashed_password: str
     created_at: str
     remaining_connections: int
+    is_verified: bool 
 
 class MinimalUser(BaseModel):
     """A minimal user model that only gives name and phone number"""
