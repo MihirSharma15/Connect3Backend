@@ -49,7 +49,7 @@ app.include_router(auth_router)
 
 @app.get("/", status_code=200)
 async def root():
-    return {"message": "Welcome to Connect3, a social network for UNC students"}
+    return {"message": "Welcome to Connect3, a social network for UNC students. Built by M & P"}
 
 @app.get("/health", status_code=200)
 async def health(db: Annotated[GraphDatabase, Depends(get_neo4j_driver)]):
