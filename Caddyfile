@@ -4,5 +4,5 @@ api.connect3.live {
 
 	# Reverse proxy to your FastAPI app.
 	# If FastAPI runs on the same host on port 8000, use localhost:8000.
-	reverse_proxy * http://host.docker.internal:8080
+	reverse_proxy * connect3v3:8080
 }

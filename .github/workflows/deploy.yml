@@ -55,7 +55,7 @@ jobs:
           docker push ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPOSITORY }}:latest
 
       # 7) SSH into EC2, pull the new image, and run it
-      - name: Deploy to EC2
+      - name: Deploy FastAPI to EC2
         run: |
           # Write our SSH key to a file
           echo "${{ secrets.EC2_SSH_KEY }}" | base64 --decode > ec2_key.pem
@@ -68,6 +68,9 @@ jobs:
 
           # SSH in and run commands
           ssh -o StrictHostKeyChecking=no -i ec2_key.pem ec2-user@${{ secrets.EC2_PUBLIC_IP }} "\
+          # Check if Docker Network exists, if it doesn't, create it.
+          docker network inspect mynetwork >/dev/null 2>&1 || docker network create mynetwork \
+
             aws ecr get-login-password --region ${{ secrets.AWS_REGION }} \
               | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }} \
             && docker pull ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPOSITORY }}:latest \
@@ -75,12 +78,13 @@ jobs:
             && docker rm connect3v3 || true \
             && docker run -d \
                --env-file /home/ec2-user/.env \
+               --network mynetwork \
                -p 8080:8080 --restart always \
                --name connect3v3 \
                ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPOSITORY }}:latest \
           "
       # 8) Restart Reverse Proxy
-      - name: Restart Reverse Proxy
+      - name: Deploy & Restart Reverse Proxy
         run: |
 
           # Copy the Caddyfile to EC2 (if updated)
@@ -88,9 +92,12 @@ jobs:
 
           # SSH into EC2 and restart the reverse proxy container (Caddy)
           ssh -o StrictHostKeyChecking=no -i ec2_key.pem ec2-user@${{ secrets.EC2_PUBLIC_IP }} "\
+          # Ensure the Docker network exists
+            docker network inspect mynetwork >/dev/null 2>&1 || docker network create mynetwork \
             docker stop caddy-proxy || true \
             && docker rm caddy-proxy || true \
             && docker run -d \
+               --network mynetwork \
                --restart always \
                --name caddy-proxy \
                -p 443:443 -p 80:80 \
