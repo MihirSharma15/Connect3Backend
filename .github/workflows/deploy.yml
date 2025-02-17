@@ -68,6 +68,8 @@ jobs:
 
           # SSH in and run commands
           ssh -o StrictHostKeyChecking=no -i ec2_key.pem ec2-user@${{ secrets.EC2_PUBLIC_IP }} "\
+          # Prune unused docker objects to free up space
+          docker system prune -af || true \
           # Check if Docker Network exists, if it doesn't, create it.
           docker network inspect mynetwork >/dev/null 2>&1 || docker network create mynetwork \
 
