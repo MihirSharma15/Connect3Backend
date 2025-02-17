@@ -1,0 +1,8 @@
+api.connect3.live {
+	# Enable automatic HTTPS. Replace with your email to receive important notices.
+	tls mihir.sharma@unc.edu
+
+	# Reverse proxy to your FastAPI app.
+	# If FastAPI runs on the same host on port 8000, use localhost:8000.
+	reverse_proxy * localhost:80
+}

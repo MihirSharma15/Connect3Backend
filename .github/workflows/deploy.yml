@@ -75,7 +75,28 @@ jobs:
             && docker rm connect3v3 || true \
             && docker run -d \
                --env-file /home/ec2-user/.env \
-               -p 80:8080 \
+               -p 80:8080 --restart always \
                --name connect3v3 \
                ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPOSITORY }}:latest \
+          "
+      # 8) Restart Reverse Proxy
+      - name: Restart Reverse Proxy
+        run: |
+          # Write SSH key to file (if not persisted from previous step)
+          echo "${{ secrets.EC2_SSH_KEY }}" | base64 --decode > ec2_key.pem
+          chmod 400 ec2_key.pem
+
+          # Copy the Caddyfile to EC2 (if updated)
+          scp -o StrictHostKeyChecking=no -i ec2_key.pem Caddyfile ec2-user@${{ secrets.EC2_PUBLIC_IP }}:/home/ec2-user/Caddyfile
+
+          # SSH into EC2 and restart the reverse proxy container (Caddy)
+          ssh -o StrictHostKeyChecking=no -i ec2_key.pem ec2-user@${{ secrets.EC2_PUBLIC_IP }} "\
+            docker stop caddy-proxy || true \
+            && docker rm caddy-proxy || true \
+            && docker run -d \
+               --restart always \
+               --name caddy-proxy \
+               -p 443:443 \
+               -v /home/ec2-user/Caddyfile:/etc/caddy/Caddyfile \
+               caddy:2 \
           "
