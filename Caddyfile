@@ -4,5 +4,5 @@ api.connect3.live {
 
 	# Reverse proxy to your FastAPI app.
 	# If FastAPI runs on the same host on port 8000, use localhost:8000.
-	reverse_proxy * localhost:80
+	reverse_proxy * http://localhost:80
 }
