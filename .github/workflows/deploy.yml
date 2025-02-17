@@ -82,9 +82,6 @@ jobs:
       # 8) Restart Reverse Proxy
       - name: Restart Reverse Proxy
         run: |
-          # Write SSH key to file (if not persisted from previous step)
-          echo "${{ secrets.EC2_SSH_KEY }}" | base64 --decode > ec2_key.pem
-          chmod 400 ec2_key.pem
 
           # Copy the Caddyfile to EC2 (if updated)
           scp -o StrictHostKeyChecking=no -i ec2_key.pem Caddyfile ec2-user@${{ secrets.EC2_PUBLIC_IP }}:/home/ec2-user/Caddyfile
