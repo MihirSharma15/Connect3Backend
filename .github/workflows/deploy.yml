@@ -69,7 +69,7 @@ jobs:
           # SSH in and run commands
           ssh -o StrictHostKeyChecking=no -i ec2_key.pem ec2-user@${{ secrets.EC2_PUBLIC_IP }} "\
           # Prune unused docker objects to free up space
-          docker system prune -af || true \
+          docker system prune -f || true \
           # Check if Docker Network exists, if it doesn't, create it.
           docker network inspect mynetwork >/dev/null 2>&1 || docker network create mynetwork \
 
@@ -94,13 +94,12 @@ jobs:
 
           # SSH into EC2 and restart the reverse proxy container (Caddy)
           ssh -o StrictHostKeyChecking=no -i ec2_key.pem ec2-user@${{ secrets.EC2_PUBLIC_IP }} "\
-            docker stop caddy-proxy || true \
-            docker rm -f caddy-proxy || true \
-            && docker run -d \
-               --network mynetwork \
-               --restart always \
-               --name caddy-proxy \
-               -p 443:443 -p 80:80 \
-               -v /home/ec2-user/Caddyfile:/etc/caddy/Caddyfile \
-               caddy:2 \
+            docker rm -f caddy-proxy || true && \
+            docker run -d \
+            --network mynetwork \
+            --restart always \
+            --name caddy-proxy \
+            -p 443:443 -p 80:80 \
+            -v /home/ec2-user/Caddyfile:/etc/caddy/Caddyfile \
+            caddy:2 \
           "
