@@ -75,7 +75,7 @@ jobs:
             && docker rm connect3v3 || true \
             && docker run -d \
                --env-file /home/ec2-user/.env \
-               -p 80:8080 --restart always \
+               -p 8080:8080 --restart always \
                --name connect3v3 \
                ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPOSITORY }}:latest \
           "
@@ -93,7 +93,7 @@ jobs:
             && docker run -d \
                --restart always \
                --name caddy-proxy \
-               -p 443:443 \
+               -p 443:443 -p 80:80 \
                -v /home/ec2-user/Caddyfile:/etc/caddy/Caddyfile \
                caddy:2 \
           "
