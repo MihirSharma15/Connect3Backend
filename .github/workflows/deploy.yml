@@ -92,7 +92,8 @@ jobs:
 
           # SSH into EC2 and restart the reverse proxy container (Caddy)
           ssh -o StrictHostKeyChecking=no -i ec2_key.pem ec2-user@${{ secrets.EC2_PUBLIC_IP }} "\
-            docker rm caddy-proxy || true \
+            docker stop caddy-proxy || true \
+            docker rm -f caddy-proxy || true \
             && docker run -d \
                --network mynetwork \
                --restart always \
