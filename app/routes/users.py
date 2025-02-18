@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from neo4j import Session
 
 # internal
-from app.services.neo4j_db import check_connection, create_connection, find_shortest_path, get_neo4j_session, create_user_in_db, get_num_of_connections, get_user_graph, get_user_in_db, reduce_connection_count
+from app.services.neo4j_db import check_connection, check_direct_connection, create_connection, find_shortest_path, get_neo4j_session, create_user_in_db, get_num_of_connections, get_user_graph, get_user_in_db, reduce_connection_count
 from app.schemas.users import BaseUser, GraphResponse, UserConnections, UserInDb, UserPhonenumber
 from app.services.auth import get_current_user
 
@@ -49,10 +49,10 @@ async def create_connection_route(receiver: UserPhonenumber, current_user: Annot
         )
     
     try:
-        if await check_connection(user1=current_user, user2=receiver, session=session):
+        if await check_direct_connection(user1=current_user, user2=receiver, session=session):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cannot create connection. Users are already connected."
+                detail="Cannot create connection. Users are already directly connected."
             )
     except ValueError as e:
         raise HTTPException(

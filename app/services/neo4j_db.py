@@ -147,19 +147,48 @@ async def get_user_in_db(phonenumber: str, session: Session) -> Optional[UserInD
         hashed_password=node["hashed_password"],
         created_at=node["created_at"],
         remaining_connections=node["remaining_connections"],
-        is_verified=node["is_verified"]
+        is_verified=(node["is_verified"] or True)
     )
     return found_user
 
 async def check_connection(user1: UserPhonenumber, user2: UserPhonenumber, session: Session) -> bool:
     """
-    Checks if two users are connected. 
+    Checks if two users are connected by ANY PATH. 
     user1 and user2 are both UserPhoneNumbers
     """
     query = """
     MATCH (u1:User {phonenumber: $phone1}), (u2:User {phonenumber: $phone2})
     OPTIONAL MATCH p = shortestPath((u1)-[:FRIENDS_WITH*]-(u2))
     WITH p IS NOT NULL AS isConnected
+    RETURN isConnected
+    """
+    if user1.phonenumber == user2.phonenumber:
+        raise ValueError
+
+    # Extract phonenumber from each BaseUser
+    try:
+
+        phone1 = user1.phonenumber
+        phone2 = user2.phonenumber
+        result = session.run(query, phone1=phone1, phone2=phone2)
+        record = result.single()
+        if record:
+            return bool(record["isConnected"])
+
+        # If there's no record, consider them not connected
+        return False
+    except ValueError as e:
+        raise ValueError(e) from e
+
+async def check_direct_connection(user1: UserPhonenumber, user2: UserPhonenumber, session: Session) -> bool:
+    """
+    Checks if two users are connected DIRECTLY aka A->B. 
+    user1 and user2 are both UserPhoneNumbers
+    """
+    query = """
+    MATCH (u1:User {phonenumber: $phone1}), (u2:User {phonenumber: $phone2})
+    OPTIONAL MATCH (u1)-[r:FRIENDS_WITH]->(u2)
+    WITH r IS NOT NULL AS isConnected
     RETURN isConnected
     """
     if user1.phonenumber == user2.phonenumber:
@@ -195,8 +224,8 @@ async def create_connection(user1: UserPhonenumber, user2: UserPhonenumber, sess
     if user1.phonenumber == user2.phonenumber:
         raise ValueError
 
-    # 1. Check if there's *any* path between them
-    if not await check_connection(user1, user2, session):
+    # 1. Check if there's a direct path between them
+    if not await check_direct_connection(user1, user2, session):
         # 2. No existing connection found, so create a new one
         query = """
         MATCH (u1:User {phonenumber: $phone1}), (u2:User {phonenumber: $phone2})
