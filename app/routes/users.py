@@ -36,26 +36,26 @@ async def create_connection_route(receiver: UserPhonenumber, current_user: Annot
     curr_phonenumber = UserPhonenumber(phonenumber=current_user.phonenumber)
     remaining_connections = await get_num_of_connections(curr_phonenumber, session)
     if remaining_connections <= 0:
-        return HTTPException(
+        raise HTTPException(
             status_code=status.HTTP_405_METHOD_NOT_ALLOWED,
             detail="Cannot create connection. User has reached maximum connections."
         )
     
     receiver_user = await get_user_in_db(phonenumber=receiver.phonenumber, session=session)
     if not receiver_user:
-        return HTTPException(
+        raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot create connection. Receiver user not found."
         )
     
     try:
         if await check_connection(user1=current_user, user2=receiver, session=session):
-            return HTTPException(
+            raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Cannot create connection. Users are already connected."
             )
     except ValueError as e:
-        return HTTPException(
+        raise HTTPException(
             status_code=500,
             detail=f"Server error: {str(e)}"
         )
