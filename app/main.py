@@ -1,5 +1,5 @@
 # external
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, status
 from typing import Annotated
 from neo4j import GraphDatabase
 from twilio.rest import Client
@@ -47,11 +47,11 @@ app.add_middleware(
 app.include_router(user_router)
 app.include_router(auth_router)
 
-@app.get("/", status_code=200)
+@app.get("/", status_code=status.HTTP_200_OK)
 async def root():
     return {"message": "Welcome to Connect3, a social network for UNC students. Built by M & P"}
 
-@app.get("/health", status_code=200)
+@app.get("/health", status_code=status.HTTP_200_OK)
 async def health(db: Annotated[GraphDatabase, Depends(get_neo4j_driver)]):
     try:
         db.verify_connectivity()

@@ -1,12 +1,12 @@
 from pydantic import BaseModel, Field
 from pydantic_extra_types.phone_numbers import PhoneNumber
-from typing import List, Optional
+from typing import List, Optional, Union
 
 # internal
 from app.schemas.auth import Token
 from app.schemas.usphonenumber import USPhoneNumber
 class BaseUser(BaseModel):
-    # base model for users 
+    # base model for users
     name: Optional[str] = str
     phonenumber: USPhoneNumber
     hashed_password: Optional[str] = str
@@ -32,7 +32,7 @@ class LogInUser(BaseModel):
     password: str
 
 class UserInDb(BaseModel):
-    # model for users in the database
+    """model for users in the database"""
     user_id: str
     name: str
     phonenumber: USPhoneNumber
@@ -43,8 +43,9 @@ class UserInDb(BaseModel):
 
 class MinimalUser(BaseModel):
     """A minimal user model that only gives name and phone number"""
+    user_id: str
     name: str
-    phonenumber: USPhoneNumber
+    phonenumber: Union[USPhoneNumber, str] # change this so USPHonenumber in prod.
 
 class UserConnections(BaseModel):
     """Model that describes the connections, and number of connections that a user currently has in the DB"""
@@ -65,3 +66,12 @@ class UserConnections(BaseModel):
         connections = [MinimalUser(**dict(node)) for node in nodes]
         return cls(connections=connections)
 
+class GraphEdge(BaseModel):
+    """Model that describes the edge between two users in the DB"""
+    source: str #ID of the starting Node
+    target: str #ID of the ending Node
+
+class GraphResponse(BaseModel):
+    """Model that describes the response of the graph query"""
+    nodes: List[MinimalUser] = Field(default_factory=list)
+    edges: List[GraphEdge] = Field(default_factory=list)

@@ -11,7 +11,7 @@ from neo4j import Session
 from typing import Optional
 from functools import lru_cache
 # internal 
-from app.schemas.users import BaseUser, MinimalUser, UserConnections, UserInDb, UserPhonenumber
+from app.schemas.users import BaseUser, GraphEdge, GraphResponse, MinimalUser, UserConnections, UserInDb, UserPhonenumber
 from app.schemas.usphonenumber import USPhoneNumber
 
 # HELPER METHODS
@@ -232,6 +232,7 @@ async def get_connections(user1: UserPhonenumber, session: Session) -> UserConne
     for node in connection_nodes:
         connections_list.append(
             MinimalUser(
+                id=node["user_id"],
                 name=node["name"],
                 phonenumber=node["phonenumber"]
             )
@@ -289,3 +290,34 @@ async def find_shortest_path(user1: UserPhonenumber, user2: UserPhonenumber, ses
         # Handle the case when no path is found
         raise ValueError("No connection path found between the two users.")
 
+async def get_user_graph(user1: UserPhonenumber, session: Session, degrees: int = 6) -> GraphResponse:
+    """Gets a user's graph database to a certain number of degrees. Assumed to be 6 in this case."""
+    degrees_int = int(degrees)  # Ensure it's an integer
+    query = f"""
+    MATCH path = (user:User {{phonenumber: $phone}})-[:FRIENDS_WITH*1..{degrees_int}]-(other)
+    RETURN path"""
+    result = session.run(query=query, phone=user1.phonenumber, degrees=degrees)
+
+    nodes_dict = {}
+    edges_set = set()
+    for record in result:
+        path = record["path"]
+        print(path)
+        # Extract nodes
+        for node in path.nodes:
+            # Assuming each node has an 'id' field
+            node_id = node.get("user_id")
+            if node_id not in nodes_dict:
+                # Convert node to dict if needed (Neo4j objects often provide a ._properties or similar)
+                node_data = dict(node)
+                nodes_dict[node_id] = MinimalUser(**node_data)
+        # Extract relationships as edges
+        for rel in path.relationships:
+            source_id = rel.start_node.get("user_id")
+            target_id = rel.end_node.get("user_id")
+            edges_set.add((source_id, target_id))
+
+    # Convert edge tuples to GraphEdge models
+    edges = [GraphEdge(source=src, target=target) for src, target in edges_set]
+    return GraphResponse(nodes=list(nodes_dict.values()), edges=edges)
+    
