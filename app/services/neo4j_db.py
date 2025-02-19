@@ -322,6 +322,9 @@ async def find_shortest_path(user1: UserPhonenumber, user2: UserPhonenumber, ses
 async def get_user_graph(user1: UserPhonenumber, session: Session, degrees: int = 6) -> GraphResponse:
     """Gets a user's graph database to a certain number of degrees. Assumed to be 6 in this case."""
     degrees_int = int(degrees)  # Ensure it's an integer
+    if degrees_int < 1:
+        raise ValueError
+    
     query = f"""
     MATCH path = (user:User {{phonenumber: $phone}})-[:FRIENDS_WITH*1..{degrees_int}]-(other)
     RETURN path"""
@@ -331,7 +334,6 @@ async def get_user_graph(user1: UserPhonenumber, session: Session, degrees: int 
     edges_set = set()
     for record in result:
         path = record["path"]
-        print(path)
         # Extract nodes
         for node in path.nodes:
             # Assuming each node has an 'id' field
