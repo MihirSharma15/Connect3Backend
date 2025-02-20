@@ -16,6 +16,7 @@ from app.schemas.twilio import TwilioVerificationModel, VerifyOTPModel
 from app.services.twilio import get_twilio_service, send_OTP_text, verify_OTP_text
 
 auth_router = APIRouter(
+    prefix="/auth",
     tags=["auth"],
 )
 
