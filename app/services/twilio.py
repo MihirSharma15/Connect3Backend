@@ -8,6 +8,7 @@ from functools import lru_cache
 from app.core.config import settings
 from app.schemas.twilio import TwilioVerificationModel, VerifyOTPModel
 from app.schemas.users import UserPhonenumber
+from app.schemas.usphonenumber import USPhoneNumber
 
 @lru_cache
 def get_twilio_client(request: Request) -> Client:
@@ -62,6 +63,17 @@ def verify_OTP_text(verification_code: VerifyOTPModel, service: Client) -> Twili
         date_updated=verification_check.date_updated
     )
 
+def send_sms(message: str, to: USPhoneNumber, client: Client):
+    if not message or message == "":
+        raise Exception("Message cannot be empty")
+    
+    response = client.messages.create(
+    body=message, 
+    from_="+19192149053",
+    to=to,)
+    
+    if response.body.get("status") == "failed":
+        raise Exception("Failed to send Message")
 
 
 

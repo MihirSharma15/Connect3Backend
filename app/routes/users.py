@@ -7,6 +7,7 @@ from neo4j import Session
 from app.services.neo4j_db import check_connection, check_direct_connection, create_connection, find_shortest_path, get_neo4j_session, create_user_in_db, get_num_of_connections, get_user_graph, get_user_in_db, reduce_connection_count
 from app.schemas.users import BaseUser, GraphResponse, UserConnections, UserInDb, UserPhonenumber
 from app.services.auth import get_current_user
+from app.services.twilio import get_twilio_client, send_sms
 
 user_router = APIRouter(
     prefix="/users",
@@ -31,23 +32,45 @@ async def get_current_user_route(current_user: Annotated[BaseUser, Depends(get_c
 
 
 @user_router.post("/connect", status_code=status.HTTP_201_CREATED)
-async def create_connection_route(receiver: UserPhonenumber, current_user: Annotated[BaseUser, Depends(get_current_user)], session: Session = Depends(get_neo4j_session)):
-    """Creates a connection between the current user and the phone number. If the current_user has 0 remaining_connections, we throw an error. If we can't find the receiver, we throw an error. """
+async def create_connection_route(receiver: UserPhonenumber, 
+                                  current_user: Annotated[BaseUser, Depends(get_current_user)], session: Session = Depends(get_neo4j_session), 
+                                  twilio_client: Session = Depends(get_twilio_client)):
+    """Creates a connection between the current user and the phone number. If the current_user has 0 remaining_connections, we throw an error. If we can't find the receiver, we create it in the DB and send a text message to the receiver"""
     curr_phonenumber = UserPhonenumber(phonenumber=current_user.phonenumber)
     remaining_connections = await get_num_of_connections(curr_phonenumber, session)
+
+    # if the user has no remaining connections, we throw an error
     if remaining_connections <= 0:
         raise HTTPException(
             status_code=status.HTTP_405_METHOD_NOT_ALLOWED,
             detail="Cannot create connection. User has reached maximum connections."
         )
-    
+    # see if the user is in the DB
     receiver_user = await get_user_in_db(phonenumber=receiver.phonenumber, session=session)
+    # the user doesn't exist in the DB:
     if not receiver_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot create connection. Receiver user not found."
-        )
-    
+        # create the user but as unverified
+        try:
+            user_to_add = BaseUser(phonenumber=receiver.phonenumber)
+            await create_user_in_db(user=user_to_add, session=session)
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Server error: {str(e)}"
+            )
+        
+        # we need to send a text message to the user
+        try:
+            await send_sms(
+                message=f"Hey there! {current_user.name} has chosen YOU as their connection on Connect3; UNC's first social graph. Curious to see your place at UNC?: Connect3.live",
+                to=receiver.phonenumber,
+                client=twilio_client
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Server error: {str(e)}"
+            )
     try:
         if await check_direct_connection(user1=current_user, user2=receiver, session=session):
             raise HTTPException(
@@ -66,7 +89,6 @@ async def create_connection_route(receiver: UserPhonenumber, current_user: Annot
     try:
         await create_connection(user1=current_user, user2=receiver, session=session)
         updated_num_of_connection = await reduce_connection_count(user1=current_user, session=session)
-        return {"updated_connection": updated_num_of_connection}
     except Exception as e:
         return HTTPException(
             status_code=500,

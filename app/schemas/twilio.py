@@ -22,3 +22,5 @@ class VerifyOTPModel(BaseModel):
     """This model is used to verify the OTP code from a given phone number. Used during authentication practices"""
     phonenumber: USPhoneNumber
     code: str
+
+

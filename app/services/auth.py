@@ -89,12 +89,12 @@ async def signup_user_service(user: SignUpUser, session: Session):
     if not, calls neo4j_db to create the user
     Returns the user
     """
-    # checks if the phone number is already in use in the DB, if it is, throw an Error
+    # checks if the user has a verified phone number. If they do have a phone number AND it's verified, we throw an error
     existing_user = await get_user_in_db(phonenumber=user.phonenumber, session=session)
-    if existing_user:
+    if existing_user and existing_user.is_verified:
         raise HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail="A user with this phone number already exists."
+        detail="A user with this phone number already exists and is verified."
         )
 
     # now we need to create the user. First we hash the password
@@ -106,7 +106,7 @@ async def signup_user_service(user: SignUpUser, session: Session):
         hashed_password=hashed_password
     )
 
-    # create the user in the DB
+    # create the user in the DB.
     created_user = await create_user_in_db(user=base_user, session=session)
     # return the created user with hashed password
     return created_user
