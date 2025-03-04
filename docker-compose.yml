@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   connect3v3:
     image: ${ECR_REGISTRY}/${ECR_REPOSITORY}:latest
