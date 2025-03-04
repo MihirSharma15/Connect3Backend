@@ -81,7 +81,6 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)], sessio
 
     return user
 
-    
 async def signup_user_service(user: SignUpUser, session: Session):
     """
     Signs up a user

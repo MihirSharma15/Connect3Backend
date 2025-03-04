@@ -39,11 +39,7 @@ async def verify_otp_code_route(verification_code: VerifyOTPModel, twilio_servic
     try:
         verification: TwilioVerificationModel = verify_OTP_text(verification_code=verification_code, service=twilio_service)
         if verification.status == "approved":
-            print("verification.to:")
-            print(verification.to)
             token  = create_access_token(data={"sub": str(verification.to)})
-            print("token:")
-            print(token)
             verification.phone_verification_token = Token(access_token=token, token_type="bearer")
             return verification
         else:
