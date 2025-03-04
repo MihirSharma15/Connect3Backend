@@ -1,6 +1,6 @@
 services:
   connect3v3:
-    image: ${ECR_REGISTRY}/${ECR_REPOSITORY}:latest
+    image: 440744231941.dkr.ecr.us-east-1.amazonaws.com/connect3v3:latest
     env_file:
       - .env
     ports:
