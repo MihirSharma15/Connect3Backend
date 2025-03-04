@@ -5,12 +5,14 @@ on:
     branches: [ "main" ]
 
 jobs:
-  build-and-push-to-ECR:
+  build-and-push:
     runs-on: ubuntu-latest
     steps:
+      # 1) Check out your code
       - name: Check out repo
         uses: actions/checkout@v3
-      
+
+      # 2) Set up AWS credentials (from GitHub Secrets)
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
@@ -18,24 +20,29 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
+      # 3) Log in to Amazon ECR
       - name: Log in to Amazon ECR
         run: |
           aws ecr get-login-password --region ${{ secrets.AWS_REGION }} \
             | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
 
+      # 4) Create .env file
       - name: Create .env file
         run: |
           echo "${{ secrets.DOTENV_FILE }}" > .env
           ls -l
           cat .env
 
+      # 5) Build and tag Docker image
       - name: Build Docker image
         run: |
           IMAGE_TAG=${GITHUB_SHA::7} 
           docker build -t connect3v3:$IMAGE_TAG .
+          # Tag for ECR
           docker tag connect3v3:$IMAGE_TAG ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPOSITORY }}:$IMAGE_TAG
-          docker tag connect3v3:$IMAGE_TAG ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPOSITORY }}:latest
+          docker tag connect3v3:$IMAGE_TAG ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPOSITORY }}:latest  
 
+      # 6) Push the image to ECR
       - name: Push to ECR
         run: |
           IMAGE_TAG=${GITHUB_SHA::7}
@@ -44,22 +51,25 @@ jobs:
 
   deploy:
     runs-on: ubuntu-latest
-    needs: build-and-push
+    needs: build-and-push  # Ensure this job runs only if build-and-push succeeds
     steps:
       - name: Deploy FastAPI to EC2
         run: |
+          # Write our SSH key to a file
           echo "${{ secrets.EC2_SSH_KEY }}" | base64 --decode > ec2_key.pem
           chmod 400 ec2_key.pem
 
+          # Copy necessary files (.env, docker-compose.yml, Caddyfile) to EC2 instance
           scp -o StrictHostKeyChecking=no -i ec2_key.pem .env ec2-user@${{ secrets.EC2_PUBLIC_IP }}:/home/ec2-user/.env
           scp -o StrictHostKeyChecking=no -i ec2_key.pem docker-compose.yml ec2-user@${{ secrets.EC2_PUBLIC_IP }}:/home/ec2-user/docker-compose.yml
           scp -o StrictHostKeyChecking=no -i ec2_key.pem Caddyfile ec2-user@${{ secrets.EC2_PUBLIC_IP }}:/home/ec2-user/Caddyfile
 
+          # SSH into EC2 Instance and deploy using docker compose
           ssh -o StrictHostKeyChecking=no -i ec2_key.pem ec2-user@${{ secrets.EC2_PUBLIC_IP }} "\
             docker network inspect mynetwork >/dev/null 2>&1 || docker network create mynetwork && \
             aws ecr get-login-password --region ${{ secrets.AWS_REGION }} \
               | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }} && \
             cd /home/ec2-user && \
             docker-compose pull && \
-            docker-compose up -d
+            docker-compose up -d \
           "
