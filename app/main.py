@@ -64,3 +64,13 @@ async def health(db: Annotated[GraphDatabase, Depends(get_neo4j_driver)]):
         "neo4j_db": db_status
         }
 
+
+@app.get("/localhost", status_code=status.HTTP_200_OK)
+async def localhost():
+    return {
+        "Message": "Hi Localhost! I saw your grant on Linkedin and jumped at the opportunity to apply. I’m creating Connect3.",
+        "Problem": "State Schools are massive. Yet, somehow everyone knows everyone. ",
+        "Solution" : "We want to visualize the social network. How? Every user gets THREE of their most valuable connections. Those three get their own three. With enough people, the social network becomes visualized. You can see the exact social context that you fit in. ",
+        "Advantages":  "Figure out HOW you know someone. On connect3, you can type in someone’s name, and you can see through how many connections you know someone. i.e Me -> James -> Ryan -> Lily.",
+        "Bottomline": "This might just be a social experiment, this might be the next Facebook. I don’t know. Regardless, I want to tackle the problem of social networks, and I hope you guys will join me for the ride. "
+    }
