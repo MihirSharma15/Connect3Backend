@@ -1,5 +1,5 @@
 # external
-from fastapi import FastAPI, Depends, status
+from fastapi import FastAPI, Depends, HTTPException, status
 from typing import Annotated
 from neo4j import GraphDatabase
 from twilio.rest import Client
@@ -57,7 +57,10 @@ async def health(db: Annotated[GraphDatabase, Depends(get_neo4j_driver)]):
         db.verify_connectivity()
         db_status = "ok"
     except Exception as e:
-        db_status = "error"
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Neo4j database connectivity error"
+        )
 
     return {
         "fastapi": "ok",
