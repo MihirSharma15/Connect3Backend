@@ -16,7 +16,7 @@ from app.schemas.auth import Token, TokenData
 
 SECRET_KEY = settings.JWT_SECRET_KEY
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 3000
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -26,9 +26,10 @@ def create_access_token(data: dict) -> str:
 
     to_encode = data.copy()
 
-    expire = datetime.now() + timedelta(ACCESS_TOKEN_EXPIRE_MINUTES)
+    # REMOVED EXPIRATION
+    # expire = datetime.now() + timedelta(ACCESS_TOKEN_EXPIRE_MINUTES)
     
-    to_encode.update({"exp": expire})
+    # to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
