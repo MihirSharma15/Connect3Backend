@@ -53,11 +53,13 @@ def verify_phone_verification_token(token: Token, phonenumber: UserPhonenumber):
 
 async def authenticate_user(phonenumber: str, password: str, session: Session):
     """Determines if the user is valid or not based on the phone number"""
+    print("finding user!")
     user = await get_user_in_db(phonenumber=phonenumber, session=session)
     if not user:
         return False
     if not verify_password(password, user.hashed_password):
         return False
+    print("user found and password is right!")
     return user
 
 async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)], session: Annotated[Session, Depends(get_neo4j_session)]):
