@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from neo4j import Session
 
 # internal
+from app.schemas.usphonenumber import USPhoneNumber
 from app.services.neo4j_db import check_connection, check_direct_connection, create_connection, find_shortest_path, get_neo4j_session, create_user_in_db, get_num_of_connections, get_user_graph, get_user_in_db, reduce_connection_count
 from app.schemas.users import BaseUser, GraphResponse, UserConnections, UserInDb, UserPhonenumber
 from app.services.auth import get_current_user
@@ -32,13 +33,14 @@ async def get_current_user_route(current_user: Annotated[BaseUser, Depends(get_c
 
 
 @user_router.post("/connect", status_code=status.HTTP_201_CREATED)
-async def create_connection_route(receiver: UserPhonenumber, 
+async def create_connection_route(receiver_number: USPhoneNumber, 
                                   current_user: Annotated[BaseUser, Depends(get_current_user)], session: Session = Depends(get_neo4j_session), 
                                   twilio_client: Session = Depends(get_twilio_client)):
     """Creates a connection between the current user and the phone number. If the current_user has 0 remaining_connections, we throw an error. If we can't find the receiver, we create it in the DB and send a text message to the receiver"""
+    receiver = UserPhonenumber(phonenumber=receiver_number)
+
     curr_phonenumber = UserPhonenumber(phonenumber=current_user.phonenumber)
     remaining_connections = await get_num_of_connections(curr_phonenumber, session)
-
     # if the user has no remaining connections, we throw an error
     if remaining_connections <= 0:
         raise HTTPException(
