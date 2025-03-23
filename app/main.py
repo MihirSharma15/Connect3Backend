@@ -4,7 +4,7 @@ from typing import Annotated
 from neo4j import GraphDatabase
 from twilio.rest import Client
 from fastapi.middleware.cors import CORSMiddleware
-
+from contextlib import asynccontextmanager
 # internal 
 from app.services.auth import get_current_user
 from app.core.config import settings
@@ -13,6 +13,7 @@ from app.routes.users import user_router
 from app.schemas.users import UserInDb
 from app.services.neo4j_db import get_neo4j_driver
 
+@asynccontextmanager
 async def lifespan(app: FastAPI):
     """Controls the lifespan of the app from startup to shutdown and properly manages the neccessary resources"""
     # neo4j
@@ -28,7 +29,6 @@ async def lifespan(app: FastAPI):
     yield
     session.close()
     driver.close()
-
 
 
 app = FastAPI(lifespan=lifespan,

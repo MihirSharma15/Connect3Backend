@@ -1,4 +1,0 @@
----
-features:
-  - |
-    Support creating different CA for kubernetes, etcd and front-proxy.

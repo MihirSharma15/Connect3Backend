@@ -16,7 +16,7 @@ from app.schemas.auth import Token, TokenData
 
 SECRET_KEY = settings.JWT_SECRET_KEY
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+ACCESS_TOKEN_EXPIRE_MINUTES = 3000 
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token")
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -26,10 +26,9 @@ def create_access_token(data: dict) -> str:
 
     to_encode = data.copy()
 
-    # REMOVED EXPIRATION
-    # expire = datetime.now() + timedelta(ACCESS_TOKEN_EXPIRE_MINUTES)
+    expire = datetime.now() + timedelta(ACCESS_TOKEN_EXPIRE_MINUTES)
     
-    # to_encode.update({"exp": expire})
+    to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
@@ -45,8 +44,6 @@ def verify_password(plain_password: str, hashed_password: str):
 def verify_phone_verification_token(token: Token, phonenumber: UserPhonenumber):
     """Checks if a token is valid for a given phone number by decoding it"""
     valid_token = jwt.decode(token.access_token, settings.JWT_SECRET_KEY, algorithms=[ALGORITHM])
-    print("valid_token:")
-    print(valid_token)
     if valid_token.get("sub") == phonenumber.phonenumber:
         return True
     return False

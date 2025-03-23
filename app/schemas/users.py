@@ -39,7 +39,8 @@ class UserInDb(BaseModel):
     hashed_password: str
     created_at: str
     remaining_connections: int
-    is_verified: bool 
+    is_verified: bool
+    invite_code: str
 
 class MinimalUser(BaseModel):
     """A minimal user model that only gives name and phone number"""

@@ -13,6 +13,7 @@ from functools import lru_cache
 # internal 
 from app.schemas.users import BaseUser, GraphEdge, GraphResponse, MinimalUser, UserConnections, UserInDb, UserPhonenumber
 from app.schemas.usphonenumber import USPhoneNumber
+from app.utils.utils import generate_five_alphanumeric_code
 
 # HELPER METHODS
 @lru_cache
@@ -84,7 +85,8 @@ async def create_user_in_db(user: BaseUser, session: Session) -> UserInDb:
             hashed_password: $hashed_password,
             created_at: $created_at,
             remaining_connections: $remaining_connections,
-            is_verified: $is_verified
+            is_verified: $is_verified,
+            invite_code: $invite_code
         })
         RETURN u
         """
@@ -95,7 +97,8 @@ async def create_user_in_db(user: BaseUser, session: Session) -> UserInDb:
         "hashed_password": hashed_password,
         "is_verified": is_verified,
         "created_at": str(datetime.datetime.now()),
-        "remaining_connections": 3
+        "remaining_connections": 3,
+        "invite_code": generate_five_alphanumeric_code()
     }
 
     result = session.run(query, **params)
@@ -116,7 +119,8 @@ async def create_user_in_db(user: BaseUser, session: Session) -> UserInDb:
         hashed_password=node.get("hashed_password", ""),
         created_at=node.get("created_at", ""),
         remaining_connections=int(node.get("remaining_connections", 0)),
-        is_verified=node.get("is_verified", False)
+        is_verified=node.get("is_verified", False),
+        invite_code=node.get("invite_code", "")
     )
 
     return created_user
@@ -147,8 +151,9 @@ async def get_user_in_db(phonenumber: str, session: Session) -> Optional[UserInD
         hashed_password=node["hashed_password"],
         created_at=node["created_at"],
         remaining_connections=node["remaining_connections"],
-        is_verified=(node["is_verified"] or True)
-    )
+        is_verified=(node["is_verified"] or True),
+        invite_code=(node["invite_code"] or ""))  # invite_code may not exist for all users
+    
     return found_user
 
 async def check_connection(user1: UserPhonenumber, user2: UserPhonenumber, session: Session) -> bool:
