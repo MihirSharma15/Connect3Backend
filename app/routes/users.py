@@ -49,30 +49,6 @@ async def create_connection_route(receiver_number: USPhoneNumber,
         )
     # see if the user is in the DB
     receiver_user = await get_user_in_db(phonenumber=receiver.phonenumber, session=session)
-    # the user doesn't exist in the DB:
-    if not receiver_user:
-        # create the user but as unverified
-        try:
-            user_to_add = BaseUser(phonenumber=receiver.phonenumber)
-            await create_user_in_db(user=user_to_add, session=session)
-        except Exception as e:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Server error: {str(e)}"
-            )
-        
-        # we need to send a text message to the user
-        try:
-            await send_sms(
-                message=f"Hey there! {current_user.name} has chosen YOU as their connection on Connect3; UNC's first social graph. Curious to see your place at UNC?: Connect3.live",
-                to=receiver.phonenumber,
-                client=twilio_client
-            )
-        except Exception as e:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Server error: {str(e)}"
-            )
     try:
         if await check_direct_connection(user1=current_user, user2=receiver, session=session):
             raise HTTPException(
