@@ -137,6 +137,9 @@ async def find_user_by_invite_code(invite_code: str, session: Session) -> Option
     :param session: an active neo4j session
     :return: a UserInDb object if found, otherwise None
     """
+    if not invite_code or invite_code == "":
+        return None
+
     query = """
     MATCH (u:User {invite_code: $invite_code})
     RETURN u

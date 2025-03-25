@@ -58,39 +58,55 @@ async def signup_user_route(
     verification_token: str = Header(..., alias="X-Phone-Verification-Token"),
     session: Session = Depends(get_neo4j_session),
     twilio_client = Depends(get_twilio_client)):
-    """Route to sign up a user. First it checks if a user's token is valid with the header. If it is, it signs up the user. Then, we determine if there is an associated invite link. If there is, then we create a connection between the two users."""
+    """Route to sign up a user. First it checks if a user's token is valid with the header. If it is, it signs up the user. Then, we determine if there is an associated invite link. If there is, then we create a connection between the two users.
+    :param user: SignUpUser - The user to sign up
+    :param invite_code: str - The invite code to connect the user to another user
+    :param verification_token: str - The phone verification token
+    :param session: Session - The neo4j session
+    :param twilio_client: TwilioClient - The twilio client
+    :returns UserInDb - The user that was created
+    """
     try:
         user_phonenumber = UserPhonenumber(phonenumber=user.phonenumber)
         token_obj = Token(access_token=verification_token, token_type="bearer")
         valid_token = verify_phone_verification_token(token=token_obj, phonenumber=user_phonenumber)
-        if valid_token:
-            created_user = await signup_user_service(user=user, session=session)
-        else:
+        # check if the token is valid
+        if not valid_token:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid Phone Verification Token"
             )
-        # If the user has an invite code, we create a connection between the two users
+        
+        # if there is no invite_code, just sign the user up.
+        if not invite_code:
+            return await signup_user_service(user=user, session=session)
+
+        # if there is an invite code, we want to check if the invite code is valid
         inviting_user = await find_user_by_invite_code(invite_code=invite_code, session=session)
-        if inviting_user:
-            # create a connection between the inviting user and the new user (have to create phone number objects because this shit is stupid)
-            inviting_user_phonenumber = UserPhonenumber(phonenumber=inviting_user.phonenumber)
-            created_user_phonenumber = UserPhonenumber(phonenumber=created_user.phonenumber)
 
-            num_connections = await get_num_of_connections(inviting_user_phonenumber)
-            if num_connections <= 0:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Inviting User already reached maximum connections."
-                )
+        if not inviting_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invite code is invalid."
+            )
+        inviting_user_phonenumber = UserPhonenumber(phonenumber=inviting_user.phonenumber)
+        num_connections = await get_num_of_connections(inviting_user_phonenumber)
 
-            await create_connection(user1=inviting_user_phonenumber, user2=created_user_phonenumber, session=session)
-            await reduce_connection_count(inviting_user_phonenumber)
+        if num_connections <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Inviting User already reached maximum connections."
+            )
 
-            # once we have created a connection between two users, we want to send an SMS to the user
-            send_sms(f"{inviting_user.name} has accepted your request to join Connect3! Go to Connect3.live to see UNC's social graph expand.", to=inviting_user_phonenumber, client=twilio_client)
+        created_user = await signup_user_service(user=user, session=session)
+        created_user_phonenumber = UserPhonenumber(phonenumber=created_user.phonenumber)
 
-        # finally return the created_user
+        # if all looks good
+        await create_connection(user1=inviting_user_phonenumber, user2=created_user_phonenumber, session=session)
+        await reduce_connection_count(inviting_user_phonenumber)
+
+        # once we have created a connection between two users, we want to send an SMS to the user
+        send_sms(f"{inviting_user.name} has accepted your request to join Connect3! Go to Connect3.live to see UNC's social graph expand.", to=inviting_user_phonenumber, client=twilio_client)
         return created_user
             
     except HTTPException as e:
@@ -101,7 +117,7 @@ async def signup_user_route(
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to Sign up user: {str(e)}"
+            detail=f"Unexpected Error: {str(e)}"
         )
     
 @auth_router.post("/token")

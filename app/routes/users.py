@@ -73,6 +73,8 @@ async def create_connection_route(receiver_number: USPhoneNumber,
             detail=f"Server error: {str(e)}"
         )
     
+    
+
 @user_router.get("/graph", status_code=status.HTTP_200_OK)
 async def get_user_graph_route(current_user: Annotated[BaseUser, Depends(get_current_user)], session: Session = Depends(get_neo4j_session), degrees: int = 6) -> GraphResponse:
     """
