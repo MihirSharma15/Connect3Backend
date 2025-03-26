@@ -37,64 +37,37 @@ async def create_user_in_db(user: BaseUser, session: Session) -> UserInDb:
     """
     Create or update a user in the database based on phone number.
 
-    Rules:
-    1) If user.name and user.hashed_password are both null/None:
-       - name = ""
-       - hashed_password = ""
-       - is_verified = False
-    2) If user.name and user.hashed_password are non-empty:
-       - is_verified = True
-       - If phone number exists, update it; otherwise create a new node.
+    Removing the 'verified_user' so we just assume that all users are verified.
     """
 
-    # Normalize name & password
-    name = user.name if user.name else ""
-    hashed_password = user.hashed_password if user.hashed_password else ""
-    # If both name and hashed_password are non-empty => verified user
-    # Otherwise => unverified
-    is_verified = bool(name and hashed_password)
+    is_verified = True
     # Check if a user with this phone number already exists
     existing_user = await get_user_in_db(user.phonenumber, session=session)
 
-    if existing_user and existing_user.is_verified:
+    if existing_user:
         # User already exists and is verified, so we can't update it
         raise HTTPException(
             status_code=400,
             detail="User already exists and is verified")
-    elif existing_user and not existing_user.is_verified and is_verified:
-        # Update the existing user node
-        query = """
-        MATCH (u:User {phonenumber: $phonenumber})
-        SET u.name = $name,
-            u.hashed_password = $hashed_password,
-            u.is_verified = $is_verified
-        RETURN u
-        """
-    elif existing_user and not existing_user.is_verified and not is_verified:
-        raise HTTPException(
-            status_code=400,
-            detail="User already exists but is not verified. Cannot update with incomplete data."
-        )
-    else:
-        # Create a new user node
-        query = """
-        CREATE (u:User {
-            user_id: randomUUID(),
-            name: $name,
-            phonenumber: $phonenumber,
-            hashed_password: $hashed_password,
-            created_at: $created_at,
-            remaining_connections: $remaining_connections,
-            is_verified: $is_verified,
-            invite_code: $invite_code
-        })
-        RETURN u
-        """
+    # Create a new user node
+    query = """
+    CREATE (u:User {
+        user_id: randomUUID(),
+        name: $name,
+        phonenumber: $phonenumber,
+        hashed_password: $hashed_password,
+        created_at: $created_at,
+        remaining_connections: $remaining_connections,
+        is_verified: $is_verified,
+        invite_code: $invite_code
+    })
+    RETURN u
+    """
 
     params = {
-        "name": name,
+        "name": user.name,
         "phonenumber": str(user.phonenumber),
-        "hashed_password": hashed_password,
+        "hashed_password": user.hashed_password,
         "is_verified": is_verified,
         "created_at": str(datetime.datetime.now()),
         "remaining_connections": 3,
@@ -135,6 +108,44 @@ async def get_user_in_db(phonenumber: str, session: Session) -> Optional[UserInD
     """
     params = {
         "phonenumber": str(phonenumber)
+    }
+    result = session.run(query, **params)
+    record = result.single()
+
+    if record is None:
+        # No user found with the given phone number.
+        return None
+    
+    node = record["u"]
+    found_user = UserInDb(
+        user_id=node["user_id"],
+        name=node["name"],
+        phonenumber=node["phonenumber"],
+        hashed_password=node["hashed_password"],
+        created_at=node["created_at"],
+        remaining_connections=node["remaining_connections"],
+        is_verified=(node["is_verified"] or True),
+        invite_code=(node["invite_code"] or ""))  # invite_code may not exist for all users
+    
+    return found_user
+
+
+async def find_user_by_invite_code(invite_code: str, session: Session) -> Optional[UserInDb]:
+    """
+    Search for a user in the Neo4j database given a 'invite code'
+    :param invite_code: the invite code of the user to find
+    :param session: an active neo4j session
+    :return: a UserInDb object if found, otherwise None
+    """
+    if not invite_code or invite_code == "":
+        return None
+
+    query = """
+    MATCH (u:User {invite_code: $invite_code})
+    RETURN u
+    """
+    params = {
+        "invite_code": str(invite_code)
     }
     result = session.run(query, **params)
     record = result.single()

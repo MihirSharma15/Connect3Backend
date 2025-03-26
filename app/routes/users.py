@@ -1,12 +1,14 @@
 # external 
+from email.policy import HTTP
+from turtle import update
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from neo4j import Session
 
 # internal
 from app.schemas.usphonenumber import USPhoneNumber
-from app.services.neo4j_db import check_connection, check_direct_connection, create_connection, find_shortest_path, get_neo4j_session, create_user_in_db, get_num_of_connections, get_user_graph, get_user_in_db, reduce_connection_count
-from app.schemas.users import BaseUser, GraphResponse, UserConnections, UserInDb, UserPhonenumber
+from app.services.neo4j_db import check_connection, check_direct_connection, create_connection, find_shortest_path, find_user_by_invite_code, get_neo4j_session, create_user_in_db, get_num_of_connections, get_user_graph, get_user_in_db, reduce_connection_count
+from app.schemas.users import BaseUser, ConnectByInviteCode, GraphResponse, InviteCode, UserConnections, UserInDb, UserPhonenumber
 from app.services.auth import get_current_user
 from app.services.twilio import get_twilio_client, send_sms
 
@@ -34,7 +36,8 @@ async def get_current_user_route(current_user: Annotated[BaseUser, Depends(get_c
 
 @user_router.post("/connect", status_code=status.HTTP_201_CREATED)
 async def create_connection_route(receiver_number: USPhoneNumber, 
-                                  current_user: Annotated[BaseUser, Depends(get_current_user)], session: Session = Depends(get_neo4j_session), 
+                                  current_user: Annotated[BaseUser, Depends(get_current_user)], 
+                                  session: Session = Depends(get_neo4j_session), 
                                   twilio_client: Session = Depends(get_twilio_client)):
     """Creates a connection between the current user and the phone number. If the current_user has 0 remaining_connections, we throw an error. If we can't find the receiver, we create it in the DB and send a text message to the receiver"""
     receiver = UserPhonenumber(phonenumber=receiver_number)
@@ -49,30 +52,6 @@ async def create_connection_route(receiver_number: USPhoneNumber,
         )
     # see if the user is in the DB
     receiver_user = await get_user_in_db(phonenumber=receiver.phonenumber, session=session)
-    # the user doesn't exist in the DB:
-    if not receiver_user:
-        # create the user but as unverified
-        try:
-            user_to_add = BaseUser(phonenumber=receiver.phonenumber)
-            await create_user_in_db(user=user_to_add, session=session)
-        except Exception as e:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Server error: {str(e)}"
-            )
-        
-        # we need to send a text message to the user
-        try:
-            await send_sms(
-                message=f"Hey there! {current_user.name} has chosen YOU as their connection on Connect3; UNC's first social graph. Curious to see your place at UNC?: Connect3.live",
-                to=receiver.phonenumber,
-                client=twilio_client
-            )
-        except Exception as e:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Server error: {str(e)}"
-            )
     try:
         if await check_direct_connection(user1=current_user, user2=receiver, session=session):
             raise HTTPException(
@@ -97,6 +76,53 @@ async def create_connection_route(receiver_number: USPhoneNumber,
             detail=f"Server error: {str(e)}"
         )
     
+@user_router.post("/connect-by-code", status_code=status.HTTP_202_ACCEPTED)
+async def connect_by_code_route(invite_code: InviteCode, 
+                                current_user: Annotated[BaseUser, Depends(get_current_user)], 
+                                session: Session = Depends(get_neo4j_session),
+                                twilio: Session = Depends(get_twilio_client)):
+    """Connects a user to another user by invite code. In this case, the RECEIVING USER initates a connection based on the invite code. If the invite code is invalid, we throw an error. If the inviting user has less than 3 remaining connections, we throw an error. NOTE: This is different from /connect where the SENDING USER initiates the connection."""
+    try:
+        inviting_user = await find_user_by_invite_code(invite_code=invite_code.code, session=session)
+        if not inviting_user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Invite code not found."
+            )
+        
+        if inviting_user.remaining_connections <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot create connection. Inviting user has reached maximum connections."
+            )
+        
+        inviting_user_phonenumber = UserPhonenumber(phonenumber=inviting_user.phonenumber)
+        current_user_phonenumber = UserPhonenumber(phonenumber=current_user.phonenumber)
+
+        # check if the users are already connected
+        if await check_direct_connection(user1=inviting_user_phonenumber, user2=current_user_phonenumber, session=session):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot create connection. Users are already directly connected."
+            )
+        
+        # create the connection
+        await create_connection(user1=inviting_user_phonenumber, user2=current_user_phonenumber, session=session)
+        updated_num_of_connection = await reduce_connection_count(user1=inviting_user_phonenumber, session=session)
+        return {
+                "message": "Connection created successfully.",
+                "remaining_connections": updated_num_of_connection
+                }
+    except HTTPException as e:
+        raise 
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Server error: {str(e)}"
+        )
+
+    
+
 @user_router.get("/graph", status_code=status.HTTP_200_OK)
 async def get_user_graph_route(current_user: Annotated[BaseUser, Depends(get_current_user)], session: Session = Depends(get_neo4j_session), degrees: int = 6) -> GraphResponse:
     """

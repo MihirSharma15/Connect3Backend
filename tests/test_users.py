@@ -18,7 +18,6 @@ The following test cases need to be done.
 6] /{phonenumber}/connections -> returns the shortest path between two users given their phone numbers
 
 NOTE: there should >6 test cases in this file, one for each of the above endpoints and one for each of the possible outcomes (success and failure) for each endpoint. for example, test cases for when the user is not found, then a user doesn't have any more connections, etc. 
-
 """
 
 # example: (notice how client is in the header i spent 2 hours figuring this out)

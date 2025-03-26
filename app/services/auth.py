@@ -88,9 +88,9 @@ async def signup_user_service(user: SignUpUser, session: Session):
     if not, calls neo4j_db to create the user
     Returns the user
     """
-    # checks if the user has a verified phone number. If they do have a phone number AND it's verified, we throw an error
+    # checks if the user has a verified phone number. If they do have a phone number we throw an error
     existing_user = await get_user_in_db(phonenumber=user.phonenumber, session=session)
-    if existing_user and existing_user.is_verified:
+    if existing_user:
         raise HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
         detail="A user with this phone number already exists and is verified."
