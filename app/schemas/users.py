@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, constr
+from pydantic import BaseModel, Field
 from pydantic_extra_types.phone_numbers import PhoneNumber
 from typing import List, Optional, Union
 
