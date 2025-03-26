@@ -1,6 +1,4 @@
 # external 
-from email.policy import HTTP
-from turtle import update
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from neo4j import Session

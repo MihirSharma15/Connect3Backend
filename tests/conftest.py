@@ -8,7 +8,6 @@ from fastapi.testclient import TestClient
 from neo4j import GraphDatabase
 import requests
 from app.main import app
-import socket
 import time
 import logging 
 import subprocess
