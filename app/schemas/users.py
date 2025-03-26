@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, constr
 from pydantic_extra_types.phone_numbers import PhoneNumber
 from typing import List, Optional, Union
 
@@ -76,3 +76,15 @@ class GraphResponse(BaseModel):
     """Model that describes the response of the graph query"""
     nodes: List[MinimalUser] = Field(default_factory=list)
     edges: List[GraphEdge] = Field(default_factory=list)
+
+
+class InviteCode(BaseModel):
+    """Model that describes the invite code for a user."""
+    code: str = Field(min_length=5, max_length=5, pattern=r'^[A-Z0-9]{5}$')
+
+
+class ConnectByInviteCode(BaseModel):
+    """Model that describes the request to connect by invite code."""
+    invite_code: InviteCode
+    receiver_number: USPhoneNumber
+
