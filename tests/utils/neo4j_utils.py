@@ -5,13 +5,12 @@ import logging
 from neo4j import Session
 
 from app.schemas.users import UserInDb
-from tests.conftest import test_neo4j_session
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 
-def util_create_user(properties: dict, session: Session = test_neo4j_session) -> None:
+def util_create_user(properties: dict, session: Session) -> None:
     """Helper function to create a user node in neo4j using the provided session.
     :param properties: a dictionary of properties to set on the user node
     :param session: an active neo4j session, defaults to the client one
@@ -26,7 +25,7 @@ def util_create_user(properties: dict, session: Session = test_neo4j_session) ->
     result = session.run(query, **properties)
     return result.single()[0]
 
-def util_find_user_by_phonenumber(phonenumber: str, session: Session = test_neo4j_session) -> UserInDb:
+def util_find_user_by_phonenumber(phonenumber: str, session: Session) -> UserInDb:
     """Helper function to find a user node in neo4j by phone number using the provided session.
     :param phonenumber: the phone number of the user to find
     :param session: an active neo4j session, defaults to the client one
@@ -63,7 +62,7 @@ def util_find_user_by_phonenumber(phonenumber: str, session: Session = test_neo4
         logging.error("Error finding user by phonenumber %s: %s", phonenumber, e)
         return None
     
-def util_find_user_by_name(name: str, session: Session = test_neo4j_session) -> UserInDb:
+def util_find_user_by_name(name: str, session: Session) -> UserInDb:
     """Helper function to find a user node in neo4j by phone number using the provided session.
     :param phonenumber: the phone number of the user to find
     :param session: an active neo4j session, defaults to the client one
@@ -102,7 +101,7 @@ def util_find_user_by_name(name: str, session: Session = test_neo4j_session) -> 
         return None
 
 
-def util_create_connection(user1: UserInDb, user2: UserInDb, session: Session = test_neo4j_session) -> None:
+def util_create_connection(user1: UserInDb, user2: UserInDb, session: Session) -> None:
     """Helper function to create a connection between two users in neo4j using the provided session.
     :param user1: the inviting user
     :param user2: the invited/receiving user

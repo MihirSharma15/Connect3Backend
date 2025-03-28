@@ -2,6 +2,7 @@
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app
+from tests.utils.neo4j_utils import util_create_user
 
 client = TestClient(app)
 
@@ -22,7 +23,7 @@ NOTE: there should >6 test cases in this file, one for each of the above endpoin
 """
 
 # example: (notice how client is in the header i spent 2 hours figuring this out)
-def test_create_user(client):
+def test_create_user(client, test_neo4j_session):
     """Tests the /users endpoint for creating a user."""
 
     test_user = {
@@ -30,6 +31,16 @@ def test_create_user(client):
         "name": "John Doe",
         "hashed_password": "fakehashedpassword"
     }
+
+    fake_user = {
+        "phonenumber": "+11234599999",
+        "name": "John Jeer",
+        "hashed_password": "fakehashedpassword"
+    }
+
+    util_create_user(fake_user, session=test_neo4j_session)
+
+    
 
     response = client.post("/users/", json=test_user)
     assert response.status_code == 201
@@ -86,7 +97,6 @@ def test_search_user(client):
      }
     
     mock_phone_number = "+11234567890"
-    
     response = client.post("/users/{mock_phone_number}", json=mock_user)
     assert response.status_code == 201
 

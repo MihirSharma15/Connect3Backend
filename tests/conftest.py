@@ -8,10 +8,10 @@ from fastapi.testclient import TestClient
 from neo4j import GraphDatabase
 import requests
 from app.main import app
-import socket
 import time
 import logging 
 import subprocess
+import threading 
 
 from app.services.auth import create_access_token, get_current_user
 from app.services.neo4j_db import get_neo4j_session
@@ -66,7 +66,11 @@ def neo4j_container():
 
     logger.info("Stopping Neo4j container...")
     # Stop the container. With "--rm", the container will be automatically removed.
-    subprocess.run(["docker", "stop", "neo4j-test"], check=True)
+    def stop_container():
+        subprocess.run(["docker", "stop", "neo4j-test"], check=True)
+
+    threading.Thread(target=stop_container, daemon=True).start()
+    logger.info("Neo4j container stopped.")
 
 @pytest.fixture(scope="session")
 def test_neo4j_session(neo4j_container):
