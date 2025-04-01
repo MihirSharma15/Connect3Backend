@@ -32,15 +32,6 @@ def test_create_user(client, test_neo4j_session):
         "hashed_password": "fakehashedpassword"
     }
 
-    fake_user = {
-        "phonenumber": "+11234599999",
-        "name": "John Jeer",
-        "hashed_password": "fakehashedpassword"
-    }
-
-    util_create_user(fake_user, session=test_neo4j_session)
-
-    
 
     response = client.post("/users/", json=test_user)
     assert response.status_code == 201

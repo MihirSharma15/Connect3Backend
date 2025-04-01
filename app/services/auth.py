@@ -16,7 +16,7 @@ from app.schemas.auth import Token, TokenData
 
 SECRET_KEY = settings.JWT_SECRET_KEY
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 3000 
+ACCESS_TOKEN_EXPIRE_MINUTES = 3000000000
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token")
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -26,9 +26,9 @@ def create_access_token(data: dict) -> str:
 
     to_encode = data.copy()
 
-    expire = datetime.now() + timedelta(ACCESS_TOKEN_EXPIRE_MINUTES)
+    # expire = datetime.now() + timedelta(ACCESS_TOKEN_EXPIRE_MINUTES)
     
-    to_encode.update({"exp": expire})
+    # to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
@@ -56,7 +56,6 @@ async def authenticate_user(phonenumber: str, password: str, session: Session):
         return False
     if not verify_password(password, user.hashed_password):
         return False
-    print("user found and password is right!")
     return user
 
 async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)], session: Annotated[Session, Depends(get_neo4j_session)]):
