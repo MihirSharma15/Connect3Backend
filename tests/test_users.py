@@ -199,7 +199,7 @@ def test_create_connection_route_invalid_phone(client, test_neo4j_session):
         "name": "John Doe",
         "phonenumber": "+19999999998",
         "hashed_password": "fakehashedpassword",
-        "created_at": "1-1-1970",
+        "reated_at": "1-1-1970",
         "remaining_connections": 2,
         "is_verified": True,
         "invite_code": "ABCDE"
