@@ -215,32 +215,34 @@ def test_create_connection_route_invalid_phone(client, test_neo4j_session):
 # DOESN'T WORK - something is wrong with the API logic. It's givng and empty server error too which isn't helpful. Could be the fact that this is a json instead of a query
 def test_users_connect_by_code(client, test_neo4j_session):
     """Test for connecting users with connection code."""
-    mock_user = {
+    current_user = {
          "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d2",
         "name": "John Doe",
         "phonenumber": "+19999999999",
         "hashed_password": "fakehashedpassword",
         "created_at": "1-1-1970",
-        "remaining_connections": 1,
+        "remaining_connections": 3,
         "is_verified": True,
         "invite_code": "ABCDE"
     }
+    
     mock_user2 = {
         "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d3",
         "name": "John Doe",
         "phonenumber": "+19999999998",
         "hashed_password": "fakehashedpassword",
         "created_at": "1-1-1970",
-        "remaining_connections": 2,
+        "remaining_connections": 3,
         "is_verified": True,
         "invite_code": "ABCDF"
     }
 
-    util_create_user(mock_user, test_neo4j_session)
+    util_create_user(current_user, test_neo4j_session)
     util_create_user(mock_user2, test_neo4j_session)
-    response = client.post("/users/connect-by-code", json={"code": "ABCDE"})
+    # Use Code ABCDF since curernt user has code ABCDE
+    response = client.post("/users/connect-by-code", json={"code": "ABCDF"})
     assert response.status_code == 202
-    assert response.json() == "hello"
+    assert response.json() == {'message': 'Connection created successfully.', 'remaining_connections': 2}
 
 
 def test_graph_user(client, test_neo4j_session):

@@ -1,7 +1,9 @@
 # external 
+from email.policy import HTTP
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from neo4j import Session
+import logging
 
 # internal
 from app.schemas.usphonenumber import USPhoneNumber
@@ -9,6 +11,10 @@ from app.services.neo4j_db import check_connection, check_direct_connection, cre
 from app.schemas.users import BaseUser, ConnectByInviteCode, GraphResponse, InviteCode, UserConnections, UserInDb, UserPhonenumber
 from app.services.auth import get_current_user
 from app.services.twilio import get_twilio_client, send_sms
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
 
 user_router = APIRouter(
     prefix="/users",
@@ -81,20 +87,24 @@ async def connect_by_code_route(invite_code: InviteCode,
     """Connects a user to another user by invite code. In this case, the RECEIVING USER initates a connection based on the invite code. If the invite code is invalid, we throw an error. If the inviting user has less than 3 remaining connections, we throw an error. NOTE: This is different from /connect where the SENDING USER initiates the connection."""
     try:
         inviting_user = await find_user_by_invite_code(invite_code=invite_code.code, session=session)
+
         if not inviting_user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Invite code not found."
             )
+
         
         if inviting_user.remaining_connections <= 0:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Cannot create connection. Inviting user has reached maximum connections."
             )
+
         
         inviting_user_phonenumber = UserPhonenumber(phonenumber=inviting_user.phonenumber)
         current_user_phonenumber = UserPhonenumber(phonenumber=current_user.phonenumber)
+
 
         # check if the users are already connected
         if await check_direct_connection(user1=inviting_user_phonenumber, user2=current_user_phonenumber, session=session):
@@ -102,16 +112,22 @@ async def connect_by_code_route(invite_code: InviteCode,
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Cannot create connection. Users are already directly connected."
             )
-        
+
+
         # create the connection
         await create_connection(user1=inviting_user_phonenumber, user2=current_user_phonenumber, session=session)
+
         updated_num_of_connection = await reduce_connection_count(user1=inviting_user_phonenumber, session=session)
+
         return {
                 "message": "Connection created successfully.",
                 "remaining_connections": updated_num_of_connection
                 }
     except HTTPException as e:
-        raise 
+        raise HTTPException(
+            status_code=e.status_code,
+            detail=e.detail
+        )
     except Exception as e:
         raise HTTPException(
             status_code=500,
