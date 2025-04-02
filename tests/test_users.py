@@ -66,7 +66,7 @@ def test_successful_get_users(client, test_neo4j_session):
         "created_at": "1-1-1970",
         "remaining_connections": 3,
         "is_verified": True,
-        "invite_code": "abc"
+        "invite_code": "ABCDE"
      }
     
     util_create_user(mock_user, test_neo4j_session)
