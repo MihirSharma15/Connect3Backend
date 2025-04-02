@@ -1,12 +1,15 @@
 # tests/test_users.py
 from datetime import datetime
+import logging
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app
 import json
 from app.schemas.users import UserInDb
-from tests.utils.neo4j_utils import util_create_connection, util_create_user
+from tests.utils.neo4j_utils import util_create_connection, util_create_user, util_find_user_by_phonenumber
 
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 client = TestClient(app)
 
 """'
@@ -81,36 +84,39 @@ def test_successful_get_users(client, test_neo4j_session):
 
 
 
-# def test_create_connection_route(client, test_neo4j_session):
-#     """Test for successful connection via standard route."""
-#     mock_user = {
-#          "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d2",
-#         "name": "John Doe",
-#         "phonenumber": "+19999999999",
-#         "hashed_password": "fakehashedpassword",
-#         "created_at": "1-1-1970",
-#         "remaining_connections": 2,
-#         "is_verified": True,
-#         "invite_code": "abc"
-#     }
-#     mock_user2 = {
-#         "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d3",
-#         "name": "John Doe",
-#         "phonenumber": "+19999999998",
-#         "hashed_password": "fakehashedpassword",
-#         "created_at": "1-1-1970",
-#         "remaining_connections": 2,
-#         "is_verified": True,
-#         "invite_code": "abc"
-#     }
+def test_create_connection_route(client, test_neo4j_session):
+    """Test for successful connection via standard route."""
+    mock_user = {
+         "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d2",
+        "name": "John Doe",
+        "phonenumber": "+19999999999",
+        "hashed_password": "fakehashedpassword",
+        "created_at": "1-1-1970",
+        "remaining_connections": 2,
+        "is_verified": True,
+        "invite_code": "abc"
+    }
+    mock_user2 = {
+        "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d3",
+        "name": "John Doe",
+        "phonenumber": "+19999999998",
+        "hashed_password": "fakehashedpassword",
+        "created_at": "1-1-1970",
+        "remaining_connections": 2,
+        "is_verified": True,
+        "invite_code": "abc"
+    }
 
 
-#     util_create_user(mock_user, test_neo4j_session)
-#     util_create_user(mock_user2, test_neo4j_session)
-#     mock_user_obj = UserInDb(**mock_user)
-#     mock_user_obj2 = UserInDb(**mock_user2)
-#     response = client.post("/users/connect", json={'reciever_number':"+19999999998"})
-#     assert response.status_code == 201
+    util_create_user(mock_user, test_neo4j_session)
+    util_create_user(mock_user2, test_neo4j_session)
+    # logger.info(util_find_user_by_phonenumber(mock_user2["phonenumber"]))
+    # logger.info(util_find_user_by_phonenumber(mock_user["phonenumber"]))
+
+    # mock_user_obj = UserInDb(**mock_user)
+    # mock_user_obj2 = UserInDb(**mock_user2)
+    response = client.post("/users/connect", params="+19999999998")
+    assert response.status_code == 201
 
 
 # def test_graph_user(client, test_neo4j_session):
@@ -137,10 +143,10 @@ def test_successful_get_users(client, test_neo4j_session):
 #     mock_user_obj = UserInDb(**mock_user)
 #     mock_user_obj2 = UserInDb(**mock_user2)
 #     util_create_user(mock_user, test_neo4j_session)
-#     # util_create_user(mock_user2, test_neo4j_session)
-#     # util_create_connection(mock_user_obj, mock_user_obj2, test_neo4j_session)
+#     util_create_user(mock_user2, test_neo4j_session)
+#     util_create_connection(mock_user_obj, mock_user_obj2, test_neo4j_session)
 
-#     response = client.get("/users/graph", params="19999999999")
+#     response = client.get("/users/graph", params="1")
 #     assert response.status_code == 200
 #     print(response.json)
 
