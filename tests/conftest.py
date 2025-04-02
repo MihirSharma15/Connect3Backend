@@ -142,9 +142,10 @@ def client(test_neo4j_session):
             "name": "John Doe",
             "phonenumber": "+19999999999",
             "hashed_password": "fakehashedpassword",
-            "created_at": str(datetime.now()),
+            "created_at": "1-1-1970",
             "remaining_connections": 3,
-            "is_verified": True
+            "is_verified": True,
+            "invite_code": "abc"
         }
 
     # --- 4) APPLY ALL DEPENDENCY OVERRIDES AT ONCE ---
