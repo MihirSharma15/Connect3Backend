@@ -39,7 +39,6 @@ async def create_connection_route(receiver_number: USPhoneNumber,
                                   twilio_client: Session = Depends(get_twilio_client)):
     """Creates a connection between the current user and the phone number. If the current_user has 0 remaining_connections, we throw an error. If we can't find the receiver, we create it in the DB and send a text message to the receiver"""
     receiver = UserPhonenumber(phonenumber=receiver_number)
-
     curr_phonenumber = UserPhonenumber(phonenumber=current_user.phonenumber)
     remaining_connections = await get_num_of_connections(curr_phonenumber, session)
     # if the user has no remaining connections, we throw an error
