@@ -110,7 +110,7 @@ def util_create_connection(user1: UserInDb, user2: UserInDb, session: Session) -
     try:
         query = """
         MATCH (u1:User {phonenumber: $phone1}), (u2:User {phonenumber: $phone2})
-        CREATE (u1)-[rel:CONNECTED_TO]->(u2)
+        CREATE (u1)-[rel:FRIENDS_WITH]->(u2)
         RETURN rel
         """
         result = session.run(

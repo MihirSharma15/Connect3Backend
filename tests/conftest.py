@@ -13,6 +13,7 @@ import logging
 import subprocess
 import threading 
 
+from app.schemas.users import UserInDb
 from app.services.auth import create_access_token, get_current_user
 from app.services.neo4j_db import get_neo4j_session
 from app.services.twilio import get_twilio_client, get_twilio_service
@@ -137,15 +138,27 @@ def client(test_neo4j_session):
     # --- 3) MOCK CURRENT USER ---
 
     def fake_get_current_user(token: str = None, session=None):
-        return {
+        """For every method that calls get_current_user, we will return this user:
             "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d2",
             "name": "John Doe",
             "phonenumber": "+19999999999",
             "hashed_password": "fakehashedpassword",
-            "created_at": str(datetime.now()),
+            "created_at": "1-1-1970",
             "remaining_connections": 3,
-            "is_verified": True
+            "is_verified": True,
+            "invite_code": "ABCDE"
+        """
+        data = {
+            "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d2",
+            "name": "John Doe",
+            "phonenumber": "+19999999999",
+            "hashed_password": "fakehashedpassword",
+            "created_at": "1-1-1970",
+            "remaining_connections": 3,
+            "is_verified": True,
+            "invite_code": "ABCDE"
         }
+        return UserInDb(**data)
 
     # --- 4) APPLY ALL DEPENDENCY OVERRIDES AT ONCE ---
 
