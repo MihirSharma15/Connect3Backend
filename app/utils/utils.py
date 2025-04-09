@@ -7,4 +7,4 @@ def generate_five_alphanumeric_code() -> str:
     import string
 
     characters = string.ascii_uppercase + string.digits
-    return ''.join(random.choice(characters) for _ in range(5))
+    return "".join(random.choice(characters) for _ in range(5))

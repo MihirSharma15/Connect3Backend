@@ -1,13 +1,14 @@
 """
-This file represents the schema for the phone number for this application. If you need to use a phone number, 
+This file represents the schema for the phone number for this application. If you need to use a phone number,
 use this phone number.
 """
 
 import re
-from pydantic import BaseModel
 from pydantic_core import core_schema
 
-US_PHONE_REGEX = re.compile(r'^\+1\d{10}$')
+US_PHONE_REGEX = re.compile(r"^\+1\d{10}$")
+
+
 class USPhoneNumber(str):
     default_region_code = "US"
     phone_format = "E164"

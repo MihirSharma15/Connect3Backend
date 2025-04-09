@@ -1,9 +1,8 @@
 from fastapi import HTTPException, status
 from typing import Annotated
-from fastapi import Depends, HTTPException
+from fastapi import Depends
 from fastapi.security import OAuth2PasswordBearer
 from neo4j import Session
-from datetime import timedelta, datetime
 import jwt
 from jwt.exceptions import InvalidTokenError
 from passlib.context import CryptContext
@@ -21,32 +20,38 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 3000000000
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token")
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+
 def create_access_token(data: dict) -> str:
-    """ Create an JWT token with a set expiration time"""
+    """Create an JWT token with a set expiration time"""
 
     to_encode = data.copy()
 
     # expire = datetime.now() + timedelta(ACCESS_TOKEN_EXPIRE_MINUTES)
-    
+
     # to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
 
 def get_password_hash(password: str):
-    """ Get the hashed password"""
+    """Get the hashed password"""
     return pwd_context.hash(password)
+
 
 def verify_password(plain_password: str, hashed_password: str):
     """Compares the plain password and the hashed password"""
     return pwd_context.verify(plain_password, hashed_password)
 
+
 def verify_phone_verification_token(token: Token, phonenumber: UserPhonenumber):
     """Checks if a token is valid for a given phone number by decoding it"""
-    valid_token = jwt.decode(token.access_token, settings.JWT_SECRET_KEY, algorithms=[ALGORITHM])
+    valid_token = jwt.decode(
+        token.access_token, settings.JWT_SECRET_KEY, algorithms=[ALGORITHM]
+    )
     if valid_token.get("sub") == phonenumber.phonenumber:
         return True
     return False
+
 
 async def authenticate_user(phonenumber: str, password: str, session: Session):
     """Determines if the user is valid or not based on the phone number"""
@@ -58,7 +63,11 @@ async def authenticate_user(phonenumber: str, password: str, session: Session):
         return False
     return user
 
-async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)], session: Annotated[Session, Depends(get_neo4j_session)]):
+
+async def get_current_user(
+    token: Annotated[str, Depends(oauth2_scheme)],
+    session: Annotated[Session, Depends(get_neo4j_session)],
+):
     "Gets the current user"
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -73,12 +82,13 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)], sessio
         token_data = TokenData(phonenumber=phonenumber)
     except InvalidTokenError:
         raise credentials_exception
-    
+
     user = await get_user_in_db(phonenumber=phonenumber, session=session)
     if user is None:
         raise credentials_exception
 
     return user
+
 
 async def signup_user_service(user: SignUpUser, session: Session):
     """
@@ -91,17 +101,15 @@ async def signup_user_service(user: SignUpUser, session: Session):
     existing_user = await get_user_in_db(phonenumber=user.phonenumber, session=session)
     if existing_user:
         raise HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        detail="A user with this phone number already exists and is verified."
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A user with this phone number already exists and is verified.",
         )
 
     # now we need to create the user. First we hash the password
     hashed_password = get_password_hash(user.password)
     # create the user we are going to input
     base_user = BaseUser(
-        name=user.name,
-        phonenumber=user.phonenumber,
-        hashed_password=hashed_password
+        name=user.name, phonenumber=user.phonenumber, hashed_password=hashed_password
     )
 
     # create the user in the DB.

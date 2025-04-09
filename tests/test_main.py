@@ -3,12 +3,15 @@ from app.main import app  # Import FastAPI app
 
 client = TestClient(app)
 
+
 def test_health_check():
     response = client.get("/")
     assert response.status_code == 200
 
+
 # tests/test_neo4j.py
 import requests
+
 
 def test_neo4j_availability():
     # Attempt to connect to the Neo4j HTTP endpoint.

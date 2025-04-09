@@ -1,15 +1,13 @@
 # tests/test_users.py
-from datetime import datetime
 import logging
-import pytest
 from fastapi.testclient import TestClient
 from app.main import app
-import json
 from app.schemas.users import UserInDb
-from tests.utils.neo4j_utils import util_create_connection, util_create_user, util_find_user_by_phonenumber
+from tests.utils.neo4j_utils import util_create_connection, util_create_user
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
+logging.getLogger("neo4j").setLevel(logging.ERROR)
 client = TestClient(app)
 
 """'
@@ -28,6 +26,7 @@ NOTE: there should >6 test cases in this file, one for each of the above endpoin
 
 """
 
+
 # example: (notice how client is in the header i spent 2 hours figuring this out)
 def test_create_user(client, test_neo4j_session):
     """Tests the /users endpoint for creating a user."""
@@ -35,7 +34,7 @@ def test_create_user(client, test_neo4j_session):
     test_user = {
         "phonenumber": "+11234567890",
         "name": "John Doe",
-        "hashed_password": "fakehashedpassword"
+        "hashed_password": "fakehashedpassword",
     }
 
     response = client.post("/users/", json=test_user)
@@ -48,6 +47,7 @@ def test_create_user(client, test_neo4j_session):
     assert "remaining_connections" in data
     assert "is_verified" in data
 
+
 def test_successful_get_users(client, test_neo4j_session):
     """Test getting user data."""
     mock_user = {
@@ -58,9 +58,9 @@ def test_successful_get_users(client, test_neo4j_session):
         "created_at": "1-1-1970",
         "remaining_connections": 3,
         "is_verified": True,
-        "invite_code": "ABCDE"
-     }
-    
+        "invite_code": "ABCDE",
+    }
+
     util_create_user(mock_user, test_neo4j_session)
     response = client.get("/users/me")
 
@@ -74,18 +74,19 @@ def test_successful_get_users(client, test_neo4j_session):
     assert data["is_verified"] == mock_user["is_verified"]
     assert data["invite_code"] == mock_user["invite_code"]
 
-# Also, connection route doesn't seem to update total connections (from lookng at users) - can't check this in create_connection_route_test because when successful, doesn't return anything 
+
+# Also, connection route doesn't seem to update total connections (from lookng at users) - can't check this in create_connection_route_test because when successful, doesn't return anything
 def test_create_connection_route(client, test_neo4j_session):
     """Test for successful connection via standard route."""
     mock_user = {
-         "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d2",
+        "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d2",
         "name": "John Doe",
         "phonenumber": "+19999999999",
         "hashed_password": "fakehashedpassword",
         "created_at": "1-1-1970",
         "remaining_connections": 2,
         "is_verified": True,
-        "invite_code": "ABCDE"
+        "invite_code": "ABCDE",
     }
     mock_user2 = {
         "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d3",
@@ -95,9 +96,8 @@ def test_create_connection_route(client, test_neo4j_session):
         "created_at": "1-1-1970",
         "remaining_connections": 2,
         "is_verified": True,
-        "invite_code": "ABCDE"
+        "invite_code": "ABCDE",
     }
-
 
     util_create_user(mock_user, test_neo4j_session)
     util_create_user(mock_user2, test_neo4j_session)
@@ -109,14 +109,14 @@ def test_create_connection_route(client, test_neo4j_session):
 def test_create_connection_route_no_connections(client, test_neo4j_session):
     """Test for unsuccessful connection between users because of no connections remaining."""
     mock_user = {
-         "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d2",
+        "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d2",
         "name": "John Doe",
         "phonenumber": "+19999999999",
         "hashed_password": "fakehashedpassword",
         "created_at": "1-1-1970",
         "remaining_connections": 0,
         "is_verified": True,
-        "invite_code": "ABCDE"
+        "invite_code": "ABCDE",
     }
     mock_user2 = {
         "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d3",
@@ -126,7 +126,7 @@ def test_create_connection_route_no_connections(client, test_neo4j_session):
         "created_at": "1-1-1970",
         "remaining_connections": 2,
         "is_verified": True,
-        "invite_code": "ABCDE"
+        "invite_code": "ABCDE",
     }
 
     util_create_user(mock_user, test_neo4j_session)
@@ -135,20 +135,23 @@ def test_create_connection_route_no_connections(client, test_neo4j_session):
     response = client.post("/users/connect", params={"receiver_number": "+19999999998"})
 
     assert response.status_code == 405
-    assert response.json()["detail"] == "Cannot create connection. User has reached maximum connections."
+    assert (
+        response.json()["detail"]
+        == "Cannot create connection. User has reached maximum connections."
+    )
 
 
 def test_create_connection_route_already_connected(client, test_neo4j_session):
     """Test for unsuccessful connection between users because they already connected."""
     mock_user = {
-         "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d2",
+        "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d2",
         "name": "John Doe",
         "phonenumber": "+19999999999",
         "hashed_password": "fakehashedpassword",
         "created_at": "1-1-1970",
         "remaining_connections": 1,
         "is_verified": True,
-        "invite_code": "ABCDE"
+        "invite_code": "ABCDE",
     }
     mock_user2 = {
         "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d3",
@@ -158,7 +161,7 @@ def test_create_connection_route_already_connected(client, test_neo4j_session):
         "created_at": "1-1-1970",
         "remaining_connections": 2,
         "is_verified": True,
-        "invite_code": "ABCDE"
+        "invite_code": "ABCDE",
     }
 
     util_create_user(mock_user, test_neo4j_session)
@@ -171,20 +174,24 @@ def test_create_connection_route_already_connected(client, test_neo4j_session):
     assert response.status_code == 400
 
     data = response.json()
-    assert data["detail"] == "Cannot create connection. Users are already directly connected."
+    assert (
+        data["detail"]
+        == "Cannot create connection. Users are already directly connected."
+    )
 
-# Doesnt work right now - doesn't throw anything when a number doesn't exist in db, because there's no check for receiver user in users.py. Also somehow it connects with proper exit code(?)  
+
+# Doesnt work right now - doesn't throw anything when a number doesn't exist in db, because there's no check for receiver user in users.py. Also somehow it connects with proper exit code(?)
 def test_create_connection_route_invalid_phone(client, test_neo4j_session):
     """Test for unsuccessful connection because of an invalid paramaeter."""
     mock_user = {
-         "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d2",
+        "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d2",
         "name": "John Doe",
         "phonenumber": "+19999999999",
         "hashed_password": "fakehashedpassword",
         "created_at": "1-1-1970",
         "remaining_connections": 1,
         "is_verified": True,
-        "invite_code": "ABCDE"
+        "invite_code": "ABCDE",
     }
     mock_user2 = {
         "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d3",
@@ -194,7 +201,7 @@ def test_create_connection_route_invalid_phone(client, test_neo4j_session):
         "reated_at": "1-1-1970",
         "remaining_connections": 2,
         "is_verified": True,
-        "invite_code": "ABCDE"
+        "invite_code": "ABCDE",
     }
 
     util_create_user(mock_user, test_neo4j_session)
@@ -202,21 +209,22 @@ def test_create_connection_route_invalid_phone(client, test_neo4j_session):
     response = client.post("/users/connect", params={"receiver_number": "+12909934995"})
 
     assert True == True
-    
+
+
 # DOESN'T WORK - something is wrong with the API logic. It's givng and empty server error too which isn't helpful. Could be the fact that this is a json instead of a query
 def test_users_connect_by_code(client, test_neo4j_session):
     """Test for connecting users with connection code."""
     current_user = {
-         "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d2",
+        "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d2",
         "name": "John Doe",
         "phonenumber": "+19999999999",
         "hashed_password": "fakehashedpassword",
         "created_at": "1-1-1970",
         "remaining_connections": 3,
         "is_verified": True,
-        "invite_code": "ABCDE"
+        "invite_code": "ABCDE",
     }
-    
+
     mock_user2 = {
         "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d3",
         "name": "John Doe",
@@ -225,7 +233,7 @@ def test_users_connect_by_code(client, test_neo4j_session):
         "created_at": "1-1-1970",
         "remaining_connections": 3,
         "is_verified": True,
-        "invite_code": "ABCDF"
+        "invite_code": "ABCDF",
     }
 
     util_create_user(current_user, test_neo4j_session)
@@ -233,7 +241,10 @@ def test_users_connect_by_code(client, test_neo4j_session):
     # Use Code ABCDF since curernt user has code ABCDE
     response = client.post("/users/connect-by-code", json={"code": "ABCDF"})
     assert response.status_code == 202
-    assert response.json() == {'message': 'Connection created successfully.', 'remaining_connections': 2}
+    assert response.json() == {
+        "message": "Connection created successfully.",
+        "remaining_connections": 2,
+    }
 
 
 def test_graph_user(client, test_neo4j_session):
@@ -246,7 +257,7 @@ def test_graph_user(client, test_neo4j_session):
         "created_at": "1-1-1970",
         "remaining_connections": 3,
         "is_verified": True,
-        "invite_code": "abc"
+        "invite_code": "abc",
     }
     mock_user2 = {
         "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d3",
@@ -256,18 +267,22 @@ def test_graph_user(client, test_neo4j_session):
         "created_at": "1-1-1970",
         "remaining_connections": 3,
         "is_verified": True,
-        "invite_code": "abcd"
+        "invite_code": "abcd",
     }
     mock_response = {
-        "nodes": [{
-            "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d2",
-            "name": "John Doe",
-            "phonenumber": "+19999999999"
-        }],
-         "edges": [{
-            "source": "db5d23a7-c5b8-4ec1-be46-2028a30261d2",
-            "target": "db5d23a7-c5b8-4ec1-be46-2028a30261d3"
-        }],
+        "nodes": [
+            {
+                "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d2",
+                "name": "John Doe",
+                "phonenumber": "+19999999999",
+            }
+        ],
+        "edges": [
+            {
+                "source": "db5d23a7-c5b8-4ec1-be46-2028a30261d2",
+                "target": "db5d23a7-c5b8-4ec1-be46-2028a30261d3",
+            }
+        ],
     }
 
     mock_user_obj = UserInDb(**mock_user)
@@ -280,13 +295,16 @@ def test_graph_user(client, test_neo4j_session):
     assert response.status_code == 200
 
     data = response.json()
-    assert data["edges"][0]["source"] == mock_response["edges"][0]["source"] 
+    assert data["edges"][0]["source"] == mock_response["edges"][0]["source"]
     assert data["edges"][0]["target"] == mock_response["edges"][0]["target"]
-    assert data["nodes"][0]["user_id"] == mock_response["nodes"][0]["user_id"] 
+    assert data["nodes"][0]["user_id"] == mock_response["nodes"][0]["user_id"]
     assert data["nodes"][0]["name"] == mock_response["nodes"][0]["name"]
     assert data["nodes"][0]["phonenumber"] == mock_response["nodes"][0]["phonenumber"]
 
-def test_graph_user_multiple_degrees_centered_on_current_user(client, test_neo4j_session):
+
+def test_graph_user_multiple_degrees_centered_on_current_user(
+    client, test_neo4j_session
+):
     """
     We assume fake_get_current_user() always returns the same user:
       user_id="db5d23a7-c5b8-4ec1-be46-2028a30261d2"
@@ -313,7 +331,7 @@ def test_graph_user_multiple_degrees_centered_on_current_user(client, test_neo4j
         "created_at": "1-1-1970",
         "remaining_connections": 3,
         "is_verified": True,
-        "invite_code": "ABC"
+        "invite_code": "ABC",
     }
 
     # Define extra users to create a chain
@@ -325,7 +343,7 @@ def test_graph_user_multiple_degrees_centered_on_current_user(client, test_neo4j
         "created_at": "1-1-1970",
         "remaining_connections": 3,
         "is_verified": True,
-        "invite_code": "code2"
+        "invite_code": "code2",
     }
     user_3_data = {
         "user_id": "33333333-3333-3333-3333-333333333333",
@@ -335,7 +353,7 @@ def test_graph_user_multiple_degrees_centered_on_current_user(client, test_neo4j
         "created_at": "1-1-1970",
         "remaining_connections": 3,
         "is_verified": True,
-        "invite_code": "code3"
+        "invite_code": "code3",
     }
     user_4_data = {
         "user_id": "44444444-4444-4444-4444-444444444444",
@@ -345,7 +363,7 @@ def test_graph_user_multiple_degrees_centered_on_current_user(client, test_neo4j
         "created_at": "1-1-1970",
         "remaining_connections": 3,
         "is_verified": True,
-        "invite_code": "code4"
+        "invite_code": "code4",
     }
     user_5_data = {
         "user_id": "55555555-5555-5555-5555-555555555555",
@@ -355,7 +373,7 @@ def test_graph_user_multiple_degrees_centered_on_current_user(client, test_neo4j
         "created_at": "1-1-1970",
         "remaining_connections": 3,
         "is_verified": True,
-        "invite_code": "code5"
+        "invite_code": "code5",
     }
 
     # Create all users in DB
@@ -405,7 +423,9 @@ def test_graph_user_multiple_degrees_centered_on_current_user(client, test_neo4j
     # If your DB stores them in the opposite direction, check for that as well
     # (U2-U1) or (U3-U2). We'll just assume direction matches creation for now.
     for edge_pair in expected_edges_2:
-        assert (edge_pair in returned_edges_2) or ((edge_pair[1], edge_pair[0]) in returned_edges_2)
+        assert (edge_pair in returned_edges_2) or (
+            (edge_pair[1], edge_pair[0]) in returned_edges_2
+        )
 
     #
     # Test degrees=4
@@ -432,22 +452,24 @@ def test_graph_user_multiple_degrees_centered_on_current_user(client, test_neo4j
     }
     returned_edges_4 = {(e["source"], e["target"]) for e in graph_deg_4["edges"]}
     for edge_pair in expected_edges_4:
-        assert (edge_pair in returned_edges_4) or ((edge_pair[1], edge_pair[0]) in returned_edges_4)
+        assert (edge_pair in returned_edges_4) or (
+            (edge_pair[1], edge_pair[0]) in returned_edges_4
+        )
 
 
 def test_search_user(client, test_neo4j_session):
     """Test for searching user."""
     mock_user = {
-         "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d2",
+        "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d2",
         "name": "John Doe",
         "phonenumber": "+19999999999",
         "hashed_password": "fakehashedpassword",
         "created_at": "1-1-1970",
         "remaining_connections": 2,
         "is_verified": True,
-        "invite_code": "abc"
-     }
-    
+        "invite_code": "abc",
+    }
+
     util_create_user(mock_user, test_neo4j_session)
     response = client.get("/users/+19999999999")
     assert response.status_code == 200
@@ -471,14 +493,14 @@ def test_unsuccesful_search_user(client, test_neo4j_session):
         "created_at": "1-1-1970",
         "remaining_connections": 1,
         "is_verified": True,
-        "invite_code": "abc"
-     }
-    
+        "invite_code": "abc",
+    }
+
     util_create_user(mock_user, test_neo4j_session)
     response = client.get("/users/+19999999998")
     assert response.status_code == 404
     assert response.json()["detail"] == "User not found in DB"
- 
+
 
 def test_user_shortest_path(client, test_neo4j_session):
     """Testing for getting the shortest path for a user"""
@@ -490,7 +512,7 @@ def test_user_shortest_path(client, test_neo4j_session):
         "created_at": "1-1-1970",
         "remaining_connections": 3,
         "is_verified": True,
-        "invite_code": "ABCDE"
+        "invite_code": "ABCDE",
     }
     mock_user2 = {
         "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d3",
@@ -500,22 +522,22 @@ def test_user_shortest_path(client, test_neo4j_session):
         "created_at": "1-1-1970",
         "remaining_connections": 3,
         "is_verified": True,
-        "invite_code": "ABCDF"
+        "invite_code": "ABCDF",
     }
 
     mock_response = {
-        "connections": [{
+        "connections": [
+            {
                 "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d2",
                 "name": "John Doe",
-                "phonenumber": "+19999999999"
-            }]
+                "phonenumber": "+19999999999",
+            }
+        ]
     }
     mock_phone_number = "+19999999998"
 
-
     mock_user_obj = UserInDb(**mock_user)
     mock_user2_obj = UserInDb(**mock_user2)
-
 
     util_create_user(mock_user, test_neo4j_session)
     util_create_user(mock_user2, test_neo4j_session)
@@ -525,9 +547,14 @@ def test_user_shortest_path(client, test_neo4j_session):
     assert response.status_code == 200
     data = response.json()
 
-    assert data["connections"][0]["user_id"] == mock_response["connections"][0]["user_id"]
+    assert (
+        data["connections"][0]["user_id"] == mock_response["connections"][0]["user_id"]
+    )
     assert data["connections"][0]["name"] == mock_response["connections"][0]["name"]
-    assert data["connections"][0]["phonenumber"] == mock_response["connections"][0]["phonenumber"]
+    assert (
+        data["connections"][0]["phonenumber"]
+        == mock_response["connections"][0]["phonenumber"]
+    )
 
 
 def test_user_shortest_path_no_connections(client, test_neo4j_session):
@@ -540,7 +567,7 @@ def test_user_shortest_path_no_connections(client, test_neo4j_session):
         "created_at": "1-1-1970",
         "remaining_connections": 3,
         "is_verified": True,
-        "invite_code": "ABCDE"
+        "invite_code": "ABCDE",
     }
     mock_user2 = {
         "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d3",
@@ -550,7 +577,7 @@ def test_user_shortest_path_no_connections(client, test_neo4j_session):
         "created_at": "1-1-1970",
         "remaining_connections": 3,
         "is_verified": True,
-        "invite_code": "ABCDF"
+        "invite_code": "ABCDF",
     }
 
     mock_phone_number = "+19999999998"
@@ -563,12 +590,3 @@ def test_user_shortest_path_no_connections(client, test_neo4j_session):
 
     data = response.json()
     assert data["detail"] == "Path Not Found"
-
-   
-
-
-    
-
-
-
-
