@@ -382,6 +382,8 @@ async def get_user_graph(
                 node_data = dict(node)
                 # Add distance information to the node data
                 node_data["degree"] = degree
+                # remove phone number from there
+                node_data["phonenumber"] = None
                 nodes_dict[node_id] = MinimalUser(**node_data)
         # Extract relationships as edges
         for rel in path.relationships:

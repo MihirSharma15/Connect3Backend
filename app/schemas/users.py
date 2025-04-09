@@ -59,7 +59,7 @@ class MinimalUser(BaseModel):
 
     user_id: str
     name: str
-    phonenumber: Union[USPhoneNumber, str]  # change this so USPHonenumber in prod.
+    phonenumber: Optional[Union[USPhoneNumber, str]] = None  # change this so USPHonenumber in prod.
     degree: Optional[int] = None
 
 

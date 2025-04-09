@@ -274,7 +274,6 @@ def test_graph_user(client, test_neo4j_session):
             {
                 "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d2",
                 "name": "John Doe",
-                "phonenumber": "+19999999999",
             }
         ],
         "edges": [
@@ -299,7 +298,6 @@ def test_graph_user(client, test_neo4j_session):
     assert data["edges"][0]["target"] == mock_response["edges"][0]["target"]
     assert data["nodes"][0]["user_id"] == mock_response["nodes"][0]["user_id"]
     assert data["nodes"][0]["name"] == mock_response["nodes"][0]["name"]
-    assert data["nodes"][0]["phonenumber"] == mock_response["nodes"][0]["phonenumber"]
 
 
 def test_graph_user_multiple_degrees_centered_on_current_user(
