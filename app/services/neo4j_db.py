@@ -142,6 +142,37 @@ async def get_user_in_db(phonenumber: str, session: Session) -> Optional[UserInD
     return found_user
 
 
+async def get_user_in_db_by_id(user_id: str, session: Session) -> Optional[UserInDb]:
+    """
+    Search for a user in the Neo4j database using the provided user_id
+    """
+    query = """
+    MATCH (u:User {user_id: $user_id})
+    RETURN u
+    """
+    params = {"user_id": str(user_id)}
+    result = session.run(query, **params)
+    record = result.single()
+
+    if record is None:
+        # No user found with the given user_id.
+        return None
+
+    node = record["u"]
+    found_user = UserInDb(
+        user_id=node["user_id"],
+        name=node["name"],
+        phonenumber=node["phonenumber"],
+        hashed_password=node["hashed_password"],
+        created_at=node["created_at"],
+        remaining_connections=node["remaining_connections"],
+        is_verified=node["is_verified"] or True,
+        invite_code=node["invite_code"] or "",
+    )  # invite_code may not exist for all users
+
+    return found_user
+
+
 async def find_user_by_invite_code(
     invite_code: str, session: Session
 ) -> Optional[UserInDb]:

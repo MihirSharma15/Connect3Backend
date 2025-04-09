@@ -59,7 +59,9 @@ class MinimalUser(BaseModel):
 
     user_id: str
     name: str
-    phonenumber: Optional[Union[USPhoneNumber, str]] = None  # change this so USPHonenumber in prod.
+    phonenumber: Optional[Union[USPhoneNumber, str]] = (
+        None  # change this so USPHonenumber in prod.
+    )
     degree: Optional[int] = None
 
 
@@ -109,3 +111,32 @@ class ConnectByInviteCode(BaseModel):
 
     invite_code: InviteCode
     receiver_number: USPhoneNumber
+
+
+class ShortestPathUser(BaseModel):
+    """A minimal user model for shortest path that only includes name, id, and last 4 digits of phone"""
+
+    user_id: str
+    name: str
+    last_four_digits: str
+
+    @classmethod
+    def from_user(cls, user: MinimalUser) -> "ShortestPathUser":
+        """Creates a ShortestPathUser from a MinimalUser"""
+        phone_str = str(user.phonenumber) if user.phonenumber else ""
+        last_four = phone_str[-4:] if phone_str else ""
+        return cls(user_id=user.user_id, name=user.name, last_four_digits=last_four)
+
+
+class ShortestPathResponse(BaseModel):
+    """Model that describes the shortest path between two users"""
+
+    connections: List[ShortestPathUser] = Field(default_factory=list)
+
+    @classmethod
+    def from_nodes(cls, nodes: List) -> "ShortestPathResponse":
+        """Creates a ShortestPathResponse from a list of node objects"""
+        connections = [
+            ShortestPathUser.from_user(MinimalUser(**dict(node))) for node in nodes
+        ]
+        return cls(connections=connections)

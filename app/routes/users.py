@@ -17,14 +17,15 @@ from app.services.neo4j_db import (
     get_user_graph,
     get_user_in_db,
     reduce_connection_count,
+    get_user_in_db_by_id,
 )
 from app.schemas.users import (
     BaseUser,
     GraphResponse,
     InviteCode,
-    UserConnections,
     UserInDb,
     UserPhonenumber,
+    ShortestPathResponse,
 )
 from app.services.auth import get_current_user
 from app.services.twilio import get_twilio_client
@@ -203,15 +204,47 @@ async def get_shortest_path_to_user(
     phonenumber: str,
     current_user: Annotated[BaseUser, Depends(get_current_user)],
     session: Session = Depends(get_neo4j_session),
-) -> UserConnections:
-    """Finds the shortest path to a certain user based on phone number. Returns a UserConnections model"""
+) -> ShortestPathResponse:
+    """Finds the shortest path to a certain user based on phone number. Returns a ShortestPathResponse model"""
     receiver = UserPhonenumber(phonenumber=phonenumber)
 
     try:
-        return await find_shortest_path(
+        path = await find_shortest_path(
             user1=current_user, user2=receiver, session=session
         )
+        return ShortestPathResponse.from_nodes(path.connections)
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Path Not Found"
+        )
+
+
+@user_router.get("/id/{user_id}/shortest-path", status_code=status.HTTP_200_OK)
+async def get_shortest_path_to_user_by_id(
+    user_id: str,
+    current_user: Annotated[BaseUser, Depends(get_current_user)],
+    session: Session = Depends(get_neo4j_session),
+) -> ShortestPathResponse:
+    """Finds the shortest path to a certain user based on user_id. Returns a ShortestPathResponse model"""
+    try:
+        # Get the target user by ID
+        target_user = await get_user_in_db_by_id(user_id=user_id, session=session)
+        if not target_user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Target user not found"
+            )
+
+        # Convert to UserPhonenumber for the find_shortest_path function
+        target_user_phonenumber = UserPhonenumber(phonenumber=target_user.phonenumber)
+
+        path = await find_shortest_path(
+            user1=current_user, user2=target_user_phonenumber, session=session
+        )
+        return ShortestPathResponse.from_nodes(path.connections)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Server Error: {str(e)}",
         )

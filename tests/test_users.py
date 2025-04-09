@@ -528,7 +528,7 @@ def test_user_shortest_path(client, test_neo4j_session):
             {
                 "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d2",
                 "name": "John Doe",
-                "phonenumber": "+19999999999",
+                "last_four_digits": "9999",
             }
         ]
     }
@@ -550,8 +550,8 @@ def test_user_shortest_path(client, test_neo4j_session):
     )
     assert data["connections"][0]["name"] == mock_response["connections"][0]["name"]
     assert (
-        data["connections"][0]["phonenumber"]
-        == mock_response["connections"][0]["phonenumber"]
+        data["connections"][0]["last_four_digits"]
+        == mock_response["connections"][0]["last_four_digits"]
     )
 
 
@@ -588,3 +588,238 @@ def test_user_shortest_path_no_connections(client, test_neo4j_session):
 
     data = response.json()
     assert data["detail"] == "Path Not Found"
+
+
+def test_user_shortest_path_by_id(client, test_neo4j_session):
+    """Testing for getting the shortest path between users using user_id"""
+    mock_user = {
+        "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d2",
+        "name": "John Doe",
+        "phonenumber": "+19999999999",
+        "hashed_password": "fakehashedpassword",
+        "created_at": "1-1-1970",
+        "remaining_connections": 3,
+        "is_verified": True,
+        "invite_code": "ABCDE",
+    }
+    mock_user2 = {
+        "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d3",
+        "name": "Jon Doe",
+        "phonenumber": "+19999999998",
+        "hashed_password": "fakehashedpassword",
+        "created_at": "1-1-1970",
+        "remaining_connections": 3,
+        "is_verified": True,
+        "invite_code": "ABCDF",
+    }
+
+    mock_user_obj = UserInDb(**mock_user)
+    mock_user2_obj = UserInDb(**mock_user2)
+
+    util_create_user(mock_user, test_neo4j_session)
+    util_create_user(mock_user2, test_neo4j_session)
+    util_create_connection(mock_user_obj, mock_user2_obj, test_neo4j_session)
+
+    response = client.get(f"/users/id/{mock_user2['user_id']}/shortest-path")
+    assert response.status_code == 200
+    data = response.json()
+
+    # Verify the path contains both users with correct format
+    assert len(data["connections"]) >= 2
+    assert any(conn["user_id"] == mock_user["user_id"] for conn in data["connections"])
+    assert any(conn["user_id"] == mock_user2["user_id"] for conn in data["connections"])
+    # Verify each connection has the correct fields
+    for conn in data["connections"]:
+        assert "user_id" in conn
+        assert "name" in conn
+        assert "last_four_digits" in conn
+        assert len(conn["last_four_digits"]) == 4
+
+
+def test_user_shortest_path_by_id_not_found(client, test_neo4j_session):
+    """Testing for getting the shortest path when target user doesn't exist"""
+    mock_user = {
+        "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d2",
+        "name": "John Doe",
+        "phonenumber": "+19999999999",
+        "hashed_password": "fakehashedpassword",
+        "created_at": "1-1-1970",
+        "remaining_connections": 3,
+        "is_verified": True,
+        "invite_code": "ABCDE",
+    }
+
+    util_create_user(mock_user, test_neo4j_session)
+
+    # Try to find path to non-existent user
+    response = client.get("/users/id/non-existent-user-id/shortest-path")
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Target user not found"
+
+
+def test_user_shortest_path_complex_chain(client, test_neo4j_session):
+    """Testing shortest path with a complex chain of users"""
+    # Create a chain of users with some branching paths
+    # Structure:
+    # U1 -> U2 -> U3 -> U4 -> U5
+    #      \-> U6 -> U7
+    #           \-> U8
+
+    # First create the current user (U1) that will be returned by get_current_user
+    current_user = {
+        "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d2",  # This is the user_id that get_current_user returns
+        "name": "Current User",
+        "phonenumber": "+19999999999",  # This is the phone number that get_current_user returns
+        "hashed_password": "fakehashedpassword",
+        "created_at": "1-1-1970",
+        "remaining_connections": 3,
+        "is_verified": True,
+        "invite_code": "CURR1",
+    }
+    util_create_user(current_user, test_neo4j_session)
+    current_user_obj = UserInDb(**current_user)
+
+    # Create the rest of the users
+    users = [
+        {
+            "user_id": "user2",
+            "name": "User2",
+            "phonenumber": "+19999999992",
+            "hashed_password": "fakehashedpassword",
+            "created_at": "1-1-1970",
+            "remaining_connections": 3,
+            "is_verified": True,
+            "invite_code": "CODE2",
+        },
+        {
+            "user_id": "user3",
+            "name": "User3",
+            "phonenumber": "+19999999993",
+            "hashed_password": "fakehashedpassword",
+            "created_at": "1-1-1970",
+            "remaining_connections": 3,
+            "is_verified": True,
+            "invite_code": "CODE3",
+        },
+        {
+            "user_id": "user4",
+            "name": "User4",
+            "phonenumber": "+19999999994",
+            "hashed_password": "fakehashedpassword",
+            "created_at": "1-1-1970",
+            "remaining_connections": 3,
+            "is_verified": True,
+            "invite_code": "CODE4",
+        },
+        {
+            "user_id": "user5",
+            "name": "User5",
+            "phonenumber": "+19999999995",
+            "hashed_password": "fakehashedpassword",
+            "created_at": "1-1-1970",
+            "remaining_connections": 3,
+            "is_verified": True,
+            "invite_code": "CODE5",
+        },
+        {
+            "user_id": "user6",
+            "name": "User6",
+            "phonenumber": "+19999999996",
+            "hashed_password": "fakehashedpassword",
+            "created_at": "1-1-1970",
+            "remaining_connections": 3,
+            "is_verified": True,
+            "invite_code": "CODE6",
+        },
+        {
+            "user_id": "user7",
+            "name": "User7",
+            "phonenumber": "+19999999997",
+            "hashed_password": "fakehashedpassword",
+            "created_at": "1-1-1970",
+            "remaining_connections": 3,
+            "is_verified": True,
+            "invite_code": "CODE7",
+        },
+        {
+            "user_id": "user8",
+            "name": "User8",
+            "phonenumber": "+19999999998",
+            "hashed_password": "fakehashedpassword",
+            "created_at": "1-1-1970",
+            "remaining_connections": 3,
+            "is_verified": True,
+            "invite_code": "CODE8",
+        },
+    ]
+
+    # Create all users
+    user_objects = []
+    for user_data in users:
+        util_create_user(user_data, test_neo4j_session)
+        user_objects.append(UserInDb(**user_data))
+
+    # Create connections
+    # Main chain: Current User -> U2 -> U3 -> U4 -> U5
+    util_create_connection(current_user_obj, user_objects[0], test_neo4j_session)
+    util_create_connection(user_objects[0], user_objects[1], test_neo4j_session)
+    util_create_connection(user_objects[1], user_objects[2], test_neo4j_session)
+    util_create_connection(user_objects[2], user_objects[3], test_neo4j_session)
+
+    # Branch 1: U2 -> U6 -> U7
+    util_create_connection(user_objects[0], user_objects[4], test_neo4j_session)
+    util_create_connection(user_objects[4], user_objects[5], test_neo4j_session)
+
+    # Branch 2: U6 -> U8
+    util_create_connection(user_objects[4], user_objects[6], test_neo4j_session)
+
+    # Test shortest path from Current User to U5 (should be direct chain)
+    response = client.get(f"/users/id/{users[3]['user_id']}/shortest-path")
+    assert response.status_code == 200
+    data = response.json()
+
+    # Verify the path contains all users in the main chain
+    expected_path = [current_user["user_id"], "user2", "user3", "user4", "user5"]
+    assert len(data["connections"]) == len(expected_path)
+    for i, conn in enumerate(data["connections"]):
+        assert conn["user_id"] == expected_path[i]
+        if i == 0:
+            assert conn["name"] == "Current User"
+            assert conn["last_four_digits"] == "9999"
+        else:
+            assert conn["name"] == f"User{i + 1}"
+            assert conn["last_four_digits"] == f"999{i + 1}"
+
+    # Test shortest path from Current User to U7 (should go through U2 and U6)
+    response = client.get(f"/users/id/{users[5]['user_id']}/shortest-path")
+    assert response.status_code == 200
+    data = response.json()
+
+    # Verify the path contains the correct users
+    expected_path = [current_user["user_id"], "user2", "user6", "user7"]
+    assert len(data["connections"]) == len(expected_path)
+    for i, conn in enumerate(data["connections"]):
+        assert conn["user_id"] == expected_path[i]
+        if i == 0:
+            assert conn["name"] == "Current User"
+            assert conn["last_four_digits"] == "9999"
+        else:
+            assert conn["name"] == f"User{expected_path[i][-1]}"
+            assert conn["last_four_digits"] == f"999{expected_path[i][-1]}"
+
+    # Test shortest path from Current User to U8 (should go through U2 and U6)
+    response = client.get(f"/users/id/{users[6]['user_id']}/shortest-path")
+    assert response.status_code == 200
+    data = response.json()
+
+    # Verify the path contains the correct users
+    expected_path = [current_user["user_id"], "user2", "user6", "user8"]
+    assert len(data["connections"]) == len(expected_path)
+    for i, conn in enumerate(data["connections"]):
+        assert conn["user_id"] == expected_path[i]
+        if i == 0:
+            assert conn["name"] == "Current User"
+            assert conn["last_four_digits"] == "9999"
+        else:
+            assert conn["name"] == f"User{expected_path[i][-1]}"
+            assert conn["last_four_digits"] == f"999{expected_path[i][-1]}"
