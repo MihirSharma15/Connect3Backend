@@ -823,3 +823,66 @@ def test_user_shortest_path_complex_chain(client, test_neo4j_session):
         else:
             assert conn["name"] == f"User{expected_path[i][-1]}"
             assert conn["last_four_digits"] == f"999{expected_path[i][-1]}"
+
+
+def test_search_user_by_code_success(client, test_neo4j_session):
+    """Test successful search for a user by invite code"""
+    mock_user = {
+        "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d2",
+        "name": "John Doe",
+        "phonenumber": "+19999999999",
+        "hashed_password": "fakehashedpassword",
+        "created_at": "1-1-1970",
+        "remaining_connections": 3,
+        "is_verified": True,
+        "invite_code": "ABCDE",
+    }
+
+    util_create_user(mock_user, test_neo4j_session)
+
+    response = client.get(f"/users/code/{mock_user['invite_code']}")
+    assert response.status_code == 200
+    data = response.json()
+
+    # Verify response contains correct data and phone number is null
+    assert data["user_id"] == mock_user["user_id"]
+    assert data["name"] == mock_user["name"]
+    assert data["phonenumber"] is None
+    assert "invite_code" not in data  # invite_code should not be in response
+
+
+def test_search_user_by_code_not_found(client, test_neo4j_session):
+    """Test search for a user with invalid invite code"""
+    mock_user = {
+        "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d2",
+        "name": "John Doe",
+        "phonenumber": "+19999999999",
+        "hashed_password": "fakehashedpassword",
+        "created_at": "1-1-1970",
+        "remaining_connections": 3,
+        "is_verified": True,
+        "invite_code": "ABCDE",
+    }
+
+    util_create_user(mock_user, test_neo4j_session)
+
+    # Try to find user with invalid code
+    response = client.get("/users/code/INVALID")
+    assert response.status_code == 404
+    assert response.json()["detail"] == "User not found in DB or Invite Code not valid"
+
+
+def test_search_user_by_code_invalid_format(client, test_neo4j_session):
+    """Test search with invalid invite code format"""
+    # Try to find user with code that doesn't match the pattern (should be 5 uppercase alphanumeric)
+    response = client.get("/users/code/abc12")  # lowercase
+    assert response.status_code == 404
+    assert response.json()["detail"] == "User not found in DB or Invite Code not valid"
+
+    response = client.get("/users/code/ABCD")  # too short
+    assert response.status_code == 404
+    assert response.json()["detail"] == "User not found in DB or Invite Code not valid"
+
+    response = client.get("/users/code/ABCDEF")  # too long
+    assert response.status_code == 404
+    assert response.json()["detail"] == "User not found in DB or Invite Code not valid"

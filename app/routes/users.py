@@ -23,6 +23,7 @@ from app.schemas.users import (
     BaseUser,
     GraphResponse,
     InviteCode,
+    MinimalUser,
     UserInDb,
     UserPhonenumber,
     ShortestPathResponse,
@@ -181,6 +182,22 @@ async def get_user_graph_route(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Server Error: {str(e)}")
+
+@user_router.get(
+    "/code/{code}", response_model=MinimalUser, status_code=status.HTTP_200_OK
+)
+async def search_user_by_code(
+    code: str,
+    session: Session = Depends(get_neo4j_session)
+) -> MinimalUser:
+    """Searches for a user based on invite code."""
+    response: UserInDb = await find_user_by_invite_code(invite_code=code, session=session)
+    if not response:
+        raise HTTPException(status_code=404, detail="User not found in DB or Invite Code not valid")
+
+    # remove the phone number so we don't send it
+    response.phonenumber = None
+    return MinimalUser(**response.model_dump())
 
 
 @user_router.get(
