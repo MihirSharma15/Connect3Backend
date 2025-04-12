@@ -396,7 +396,7 @@ async def get_user_graph(
 
     query = f"""
     MATCH path = (user:User {{phonenumber: $phone}})-[:FRIENDS_WITH*1..{degrees_int}]-(other)
-    RETURN path, length(path) as degree"""
+    RETURN path, length(path) as degree ORDER BY degree ASC"""
     result = session.run(query=query, phone=user1.phonenumber, degrees=degrees)
 
     nodes_dict = {}
