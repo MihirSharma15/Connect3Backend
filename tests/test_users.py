@@ -886,3 +886,32 @@ def test_search_user_by_code_invalid_format(client, test_neo4j_session):
     response = client.get("/users/code/ABCDEF")  # too long
     assert response.status_code == 404
     assert response.json()["detail"] == "User not found in DB or Invite Code not valid"
+
+
+def test_graph_user_no_connections(client, test_neo4j_session):
+    """Test getting the user graph when the current user has no connections"""
+    # Create the current user (from conftest.py) in the database
+    current_user = {
+        "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d2",
+        "name": "John Doe",
+        "phonenumber": "+19999999999",
+        "hashed_password": "fakehashedpassword",
+        "created_at": "1-1-1970",
+        "remaining_connections": 3,
+        "is_verified": True,
+        "invite_code": "ABCDE",
+    }
+    util_create_user(current_user, test_neo4j_session)
+
+    # Call the graph endpoint
+    response = client.get("/users/graph", params={"degrees": 1})
+    assert response.status_code == 200
+    data = response.json()
+
+    # Verify response contains only the current user
+    assert len(data["nodes"]) == 1
+    assert data["nodes"][0]["user_id"] == current_user["user_id"]
+    assert data["nodes"][0]["name"] == current_user["name"]
+    
+    # Verify no edges exist
+    assert len(data["edges"]) == 0

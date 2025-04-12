@@ -394,26 +394,36 @@ async def get_user_graph(
     if degrees_int < 1:
         raise ValueError
 
+    # Get the current user
+    current_user = await get_user_in_db(user1.phonenumber, session)
+    if not current_user:
+        raise ValueError("Current user not found")
+
+    # Convert to MinimalUser with degree 0
+    current_user_data = current_user.model_dump()
+    current_user_data["degree"] = 0
+    current_user_data["phonenumber"] = None
+    current_user_minimal = MinimalUser(**current_user_data)
+
+    # Initialize nodes_dict with current user
+    nodes_dict = {current_user_minimal.user_id: current_user_minimal}
+    edges_set = set()
+
+    # Get connections if any exist
     query = f"""
     MATCH path = (user:User {{phonenumber: $phone}})-[:FRIENDS_WITH*1..{degrees_int}]-(other)
     RETURN path, length(path) as degree ORDER BY degree ASC"""
     result = session.run(query=query, phone=user1.phonenumber, degrees=degrees)
 
-    nodes_dict = {}
-    edges_set = set()
     for record in result:
         path = record["path"]
         degree = record["degree"]
         # Extract nodes
         for node in path.nodes:
-            # Assuming each node has an 'id' field
             node_id = node.get("user_id")
             if node_id not in nodes_dict:
-                # Convert node to dict if needed (Neo4j objects often provide a ._properties or similar)
                 node_data = dict(node)
-                # Add distance information to the node data
                 node_data["degree"] = degree
-                # remove phone number from there
                 node_data["phonenumber"] = None
                 nodes_dict[node_id] = MinimalUser(**node_data)
         # Extract relationships as edges
