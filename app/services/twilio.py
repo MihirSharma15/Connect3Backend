@@ -80,5 +80,5 @@ def send_sms(message: str, to: USPhoneNumber, client: Client):
         to=to,
     )
 
-    if response.body.get("status") == "failed":
+    if response.status == "failed":
         raise Exception("Failed to send Message")
