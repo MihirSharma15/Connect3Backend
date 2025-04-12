@@ -324,7 +324,7 @@ async def get_connections(user1: UserPhonenumber, session: Session) -> UserConne
     for node in connection_nodes:
         connections_list.append(
             MinimalUser(
-                id=node["user_id"], name=node["name"], phonenumber=node["phonenumber"]
+                id=node["user_id"], name=node["name"], phonenumber=node["phonenumber"], remaining_connections=node["remaining_connections"]
             )
         )
     return UserConnections(connections=connections_list)

@@ -63,6 +63,7 @@ class MinimalUser(BaseModel):
         None  # change this so USPHonenumber in prod.
     )
     degree: Optional[int] = None
+    remaining_connections: Optional[int] = None
 
 
 class UserConnections(BaseModel):
