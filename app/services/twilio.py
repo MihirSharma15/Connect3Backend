@@ -73,12 +73,13 @@ def verify_OTP_text(
 def send_sms(message: str, to: USPhoneNumber, client: Client):
     if not message or message == "":
         raise Exception("Message cannot be empty")
-
+    print(to)
     response = client.messages.create(
         body=message,
         from_="+19192149053",
         to=to,
     )
+    print(response.status)
 
     if response.status == "failed":
         raise Exception("Failed to send Message")

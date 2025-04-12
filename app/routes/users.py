@@ -123,6 +123,7 @@ async def connect_by_code_route(
             )
 
         if inviting_user.remaining_connections <= 0:
+            print("remaining connections = 0")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Cannot create connection. Inviting user has reached maximum connections.",
@@ -154,18 +155,6 @@ async def connect_by_code_route(
         updated_num_of_connection = await reduce_connection_count(
             user1=inviting_user_phonenumber, session=session
         )
-        if inviting_user.remaining_connections > 0:
-            send_sms(
-                message=f"CONNECT3: You have a new connection! {current_user.name} has accepted your invite. You have {inviting_user.remaining_connections} remaining connections.",
-                to=inviting_user.phonenumber,
-                client=twilio,
-            )
-        elif inviting_user.remaining_connections == 0:
-            send_sms(
-                message=f"CONNECT3: You have a new connection! {current_user.name} has accepted your invite. You can now view the graph. Login at connect3.live to see your social network.",
-                to=inviting_user.phonenumber,
-                client=twilio,
-            )
 
         return {
             "message": "Connection created successfully.",
