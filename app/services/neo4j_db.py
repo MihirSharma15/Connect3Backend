@@ -385,83 +385,53 @@ async def find_shortest_path(
         # Handle the case when no path is found
         raise ValueError("No connection path found between the two users.")
 
+
 async def get_user_graph(
     user1: UserPhonenumber, session: Session, degrees: int = 6
 ) -> GraphResponse:
-    """Gets a user's graph database to a certain number of degrees. Optimized version using native Neo4j."""
+    """Gets a user's graph database to a certain number of degrees. Assumed to be 6 in this case."""
     degrees_int = int(degrees)  # Ensure it's an integer
     if degrees_int < 1:
-        raise ValueError("Degrees must be greater than 0")
+        raise ValueError
 
     # Get the current user
     current_user = await get_user_in_db(user1.phonenumber, session)
     if not current_user:
         raise ValueError("Current user not found")
 
-    query = """
-    MATCH (start:User {phonenumber: $phone})
-    WITH start
-    MATCH (other:User)
-    WHERE other = start OR EXISTS((other)-[:FRIENDS_WITH*1..6]-(start))
-    WITH other, start,
-         CASE 
-             WHEN other.phonenumber = $phone THEN 0
-             ELSE length(shortestPath((other)-[:FRIENDS_WITH*]-(start)))
-         END as degree
-    WHERE degree <= $max_degrees
-    WITH COLLECT(DISTINCT {
-        user_id: other.user_id,
-        name: other.name,
-        remaining_connections: other.remaining_connections,
-        degree: degree
-    }) as nodes, start
-    MATCH (a:User)-[r:FRIENDS_WITH]-(b:User)
-    WHERE 
-        (a = start OR EXISTS((a)-[:FRIENDS_WITH*1..6]-(start))) AND
-        (b = start OR EXISTS((b)-[:FRIENDS_WITH*1..6]-(start)))
-    WITH nodes, COLLECT(DISTINCT {
-        source: a.user_id,
-        target: b.user_id
-    }) as edges
-    RETURN nodes, edges
-    """
-    
-    try:
-        result = session.run(
-            query, 
-            phone=user1.phonenumber, 
-            max_degrees=degrees_int
-        )
-        record = result.single()
-        
-        # Create the current user node
-        current_user_node = MinimalUser(
-            user_id=current_user.user_id,
-            name=current_user.name,
-            remaining_connections=current_user.remaining_connections,
-            degree=0
-        )
+    # Convert to MinimalUser with degree 0
+    current_user_data = current_user.model_dump()
+    current_user_data["degree"] = 0
+    current_user_data["phonenumber"] = None
+    current_user_minimal = MinimalUser(**current_user_data)
 
-        if not record:
-            # Return just the current user with no edges
-            return GraphResponse(nodes=[current_user_node], edges=[])
+    # Initialize nodes_dict with current user
+    nodes_dict = {current_user_minimal.user_id: current_user_minimal}
+    edges_set = set()
 
-        # Use a dictionary to store nodes with user_id as key
-        nodes_dict = {
-            current_user.user_id: current_user_node  # Add current user first
-        }
-        
-        # Add all other nodes to the dictionary
-        for node_data in record["nodes"]:
-            node = MinimalUser(**node_data)
-            nodes_dict[node.user_id] = node
-        
-        # Convert edges to GraphEdge objects
-        edges = [GraphEdge(**edge) for edge in record["edges"]] if record["edges"] else []
-        
-        # Convert dictionary values to list for the response
-        return GraphResponse(nodes=list(nodes_dict.values()), edges=edges)
-        
-    except Exception as e:
-        # Log the actual error for debugging
-        raise ValueError(f"Error retrieving user graph: {str(e)}")
+    # Get connections if any exist
+    query = f"""
+    MATCH path = (user:User {{phonenumber: $phone}})-[:FRIENDS_WITH*1..{degrees_int}]-(other)
+    RETURN path, length(path) as degree ORDER BY degree ASC"""
+    result = session.run(query=query, phone=user1.phonenumber, degrees=degrees)
+
+    for record in result:
+        path = record["path"]
+        degree = record["degree"]
+        # Extract nodes
+        for node in path.nodes:
+            node_id = node.get("user_id")
+            if node_id not in nodes_dict:
+                node_data = dict(node)
+                node_data["degree"] = degree
+                node_data["phonenumber"] = None
+                nodes_dict[node_id] = MinimalUser(**node_data)
+        # Extract relationships as edges
+        for rel in path.relationships:
+            source_id = rel.start_node.get("user_id")
+            target_id = rel.end_node.get("user_id")
+            edges_set.add((source_id, target_id))
+
+    # Convert edge tuples to GraphEdge models
+    edges = [GraphEdge(source=src, target=target) for src, target in edges_set]
+    return GraphResponse(nodes=list(nodes_dict.values()), edges=edges)

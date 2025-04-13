@@ -7,7 +7,7 @@ from tests.utils.neo4j_utils import util_create_connection, util_create_user
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
-# logging.getLogger("neo4j").setLevel(logging.ERROR)
+logging.getLogger("neo4j").setLevel(logging.ERROR)
 client = TestClient(app)
 
 """'
