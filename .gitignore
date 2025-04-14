@@ -7,3 +7,5 @@ __pycache__/
 .pytest_cache__/
 __pycache__
 .coverage 
+.idea/
+docker-compose.dev.yml

@@ -42,13 +42,15 @@ user_router = APIRouter(
 
 
 @user_router.post("/", status_code=status.HTTP_201_CREATED)
-async def create_user(user: BaseUser, session: Session = Depends(get_neo4j_session)):
+async def create_user(password: str,user: BaseUser, session: Session = Depends(get_neo4j_session)):
     """Creates a user given a BaseUser"""
     try:
+        if password != "password":
+            raise ValueError("Invalid password")
         return await create_user_in_db(user, session)
-    except ValueError:
+    except ValueError as e:
         raise HTTPException(
-            status_code=500, detail="Internal Server Error. Failed to create User."
+            status_code=500, detail=f"Internal Server Error. Failed to create User: {str(e)}"
         )
 
 
