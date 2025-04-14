@@ -9,6 +9,9 @@ from app.services.neo4j_db import check_connection, check_direct_connection, cre
 from app.schemas.users import BaseUser, ConnectByInviteCode, GraphResponse, InviteCode, UserConnections, UserInDb, UserPhonenumber
 from app.services.auth import get_current_user
 from app.services.twilio import get_twilio_client, send_sms
+from app.logger import get_logger
+
+logger = get_logger(__name__)
 
 user_router = APIRouter(
     prefix="/users",

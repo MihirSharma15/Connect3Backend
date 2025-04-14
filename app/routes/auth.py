@@ -1,7 +1,6 @@
 # External
 
 from datetime import timedelta
-import logging
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Header, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -15,6 +14,9 @@ from app.services.neo4j_db import create_connection, find_user_by_invite_code, g
 from app.schemas.auth import Token
 from app.schemas.twilio import TwilioVerificationModel, VerifyOTPModel
 from app.services.twilio import get_twilio_client, get_twilio_service, send_OTP_text, send_sms, verify_OTP_text
+from app.logger import get_logger
+
+logger = get_logger(__name__)
 
 auth_router = APIRouter(
     prefix="/auth",
@@ -23,12 +25,18 @@ auth_router = APIRouter(
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
+
+
 @auth_router.post("/send-code", response_model=TwilioVerificationModel, status_code=status.HTTP_201_CREATED)
 async def send_otp_code_route(phonenumber: UserPhonenumber, twilio_service = Depends(get_twilio_service)):
     """This route sends an OTP code to the given phone number"""
     try:
-        return send_OTP_text(phonenumber=phonenumber, service=twilio_service)
+        logger.info(f"Trying to send OTP to {phonenumber.phonenumber}")
+        response = send_OTP_text(phonenumber=phonenumber, service=twilio_service)
+        logger.info(f"Successfully sent OTP to {phonenumber.phonenumber}")
+        return response
     except Exception as e:
+        logger.error(f"OTP couldn't be sent to {phonenumber.phonenumber}")
         raise HTTPException(
             status_code=500,
             detail=f"Failed to send OTP: {str(e)}"
@@ -38,17 +46,22 @@ async def send_otp_code_route(phonenumber: UserPhonenumber, twilio_service = Dep
 async def verify_otp_code_route(verification_code: VerifyOTPModel, twilio_service = Depends(get_twilio_service)):
     """This route verifies the code that is being sent, and if the code is correct returns a JWT token that will be used for Signing up the user"""
     try:
+        logger.info(f"Trying to verify that {verification_code.code} was sent to {verification_code.phonenumber}")
         verification: TwilioVerificationModel = verify_OTP_text(verification_code=verification_code, service=twilio_service)
+
         if verification.status == "approved":
+            logger.info(f"Verifying {verification_code.code} with {verification_code.phonenumber} was successful")
             token  = create_access_token(data={"sub": str(verification.to)})
             verification.phone_verification_token = Token(access_token=token, token_type="bearer")
             return verification
         else:
+            logger.info(f"The verification status was not approved")
             return verification
     except Exception as e:
+        logger.error(f"Failed to verify {verification_code.code} for {verification_code.phonenumber}. {str(e)}")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to verify OTP: {str(e)}"
+            detail=f"Verification failed."
         )
 
 @auth_router.post("/signup", response_model=UserInDb, status_code=status.HTTP_201_CREATED)
@@ -69,9 +82,11 @@ async def signup_user_route(
     try:
         user_phonenumber = UserPhonenumber(phonenumber=user.phonenumber)
         token_obj = Token(access_token=verification_token, token_type="bearer")
+        logger.info(f"Checking if {token_obj.access_token} is valid for {user.phonenumber}")
         valid_token = verify_phone_verification_token(token=token_obj, phonenumber=user_phonenumber)
         # check if the token is valid
         if not valid_token:
+            logger.error(f"The token {token_obj.access_token} is invalid for {user.phonenumber}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid Phone Verification Token"
@@ -79,20 +94,26 @@ async def signup_user_route(
         
         # if there is no invite_code, just sign the user up.
         if not invite_code:
+            logger.info(f"No invite code, now signing {user.phonenumber} up (creating user)")
             return await signup_user_service(user=user, session=session)
 
         # if there is an invite code, we want to check if the invite code is valid
+        logger.info(f"Checking if {invite_code} is valid")
         inviting_user = await find_user_by_invite_code(invite_code=invite_code, session=session)
 
         if not inviting_user:
+            logger.error(f"{invite_code} is invalid for {user.phonenumber}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invite code is invalid."
             )
         inviting_user_phonenumber = UserPhonenumber(phonenumber=inviting_user.phonenumber)
+        logger.info(f"Checking available connections of inviting user {inviting_user_phonenumber.phonenumber}")
+        
         num_connections = await get_num_of_connections(inviting_user_phonenumber)
 
         if num_connections <= 0:
+            logger.error(f"Inviting user {inviting_user_phonenumber.phonenumber} has already reached max number of connections")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Inviting User already reached maximum connections."
@@ -104,26 +125,31 @@ async def signup_user_route(
         # if all looks good
         await create_connection(user1=inviting_user_phonenumber, user2=created_user_phonenumber, session=session)
         await reduce_connection_count(inviting_user_phonenumber)
+        logger.info("Created a user, connected them, and reduced their connection count")
 
         # once we have created a connection between two users, we want to send an SMS to the user
         send_sms(f"{inviting_user.name} has accepted your request to join Connect3! Go to Connect3.live to see UNC's social graph expand.", to=inviting_user_phonenumber, client=twilio_client)
         return created_user
             
     except HTTPException as e:
+        logger.error(f"Failed to Sign up user: {str(e.detail)}")
         raise HTTPException(
             status_code=e.status_code,
-            detail=f"Failed to Sign up user: {str(e.detail)}"
+            detail=f"Something went wrong in your signup. Please try again later."
         )
     except Exception as e:
+        logger.error(f"Unexpected Error: {str(e)}")
         raise HTTPException(
             status_code=500,
-            detail=f"Unexpected Error: {str(e)}"
+            detail=f"Sorry, an error occurred" # Potential connect3 troubleshoot email?
         )
     
 @auth_router.post("/token")
 async def login_for_access_token(session: Annotated[Session, Depends(get_neo4j_session)], form_data: OAuth2PasswordRequestForm = Depends()) -> Token:
+    logger.info(f"Trying to authenticate {form_data.username}")
     user = await authenticate_user(phonenumber=form_data.username, password=form_data.password, session=session)
     if not user:
+        logger.error(f"fAuthentication failed for {form_data.username}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect Username or Password",
@@ -133,4 +159,7 @@ async def login_for_access_token(session: Annotated[Session, Depends(get_neo4j_s
     access_token = create_access_token(
         data={"sub": user.phonenumber}
     )
+    
+    logger.info(f"Returned {access_token} to user")
+
     return Token(access_token=access_token, token_type="bearer")
