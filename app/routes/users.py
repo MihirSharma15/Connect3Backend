@@ -30,10 +30,10 @@ from app.schemas.users import (
 )
 from app.services.auth import get_current_user
 from app.services.twilio import get_twilio_client, send_sms
+from app.logger import get_logger
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
+logger = get_logger(__name__)
 
 user_router = APIRouter(
     prefix="/users",
@@ -43,14 +43,16 @@ user_router = APIRouter(
 
 @user_router.post("/", status_code=status.HTTP_201_CREATED)
 async def create_user(password: str,user: BaseUser, session: Session = Depends(get_neo4j_session)):
-    """Creates a user given a BaseUser"""
+    """Creates a user given a BaseUser."""
     try:
         if password != "password":
+            logger.error(f"No Password was given for {user.phonenumber}", stack_info=True)
             raise ValueError("Invalid password")
         return await create_user_in_db(user, session)
     except ValueError as e:
+        logger.exception(f"Internal server error, failed to create user: {e}", stack_info=True)
         raise HTTPException(
-            status_code=500, detail=f"Internal Server Error. Failed to create User: {str(e)}"
+            status_code=500, detail=f"Unable to create user at this time."
         )
 
 
@@ -75,6 +77,7 @@ async def create_connection_route(
     remaining_connections = await get_num_of_connections(curr_phonenumber, session)
     # if the user has no remaining connections, we throw an error
     if remaining_connections <= 0:
+        logger.error(f"Connections remaining: {remaining_connections} for {curr_phonenumber}.", stack_info=True)
         raise HTTPException(
             status_code=status.HTTP_405_METHOD_NOT_ALLOWED,
             detail="Cannot create connection. User has reached maximum connections.",
@@ -87,12 +90,14 @@ async def create_connection_route(
         if await check_direct_connection(
             user1=current_user, user2=receiver, session=session
         ):
+            logger.error(f"{current_user.phonenumber} and {receiver.phonenumber} are already connected.", stack_info=True, exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Cannot create connection. Users are already directly connected.",
             )
     except ValueError as e:
-        raise HTTPException(status_code=500, detail=f"Server error: {str(e)}")
+        logger.exception(f"Server error: {e}", stack_info=True)
+        raise HTTPException(status_code=500, detail=f"Server error occurred.")
 
     # we know the user has remaining connections and the receiver user exists, and they are not already connected
     # create the connection
@@ -103,7 +108,8 @@ async def create_connection_route(
             user1=current_user, session=session
         )
     except Exception as e:
-        return HTTPException(status_code=500, detail=f"Server error: {str(e)}")
+        logger.exception(f"Server error: {e}", stack_info=True)
+        return HTTPException(status_code=500, detail=f"Server error occurred.")
 
 
 @user_router.post("/connect-by-code", status_code=status.HTTP_202_ACCEPTED)
@@ -118,14 +124,15 @@ async def connect_by_code_route(
         inviting_user = await find_user_by_invite_code(
             invite_code=invite_code.code, session=session
         )
-
+        
         if not inviting_user:
+            logger.error(f"{invite_code} was not found.", stack_info=True, exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Invite code not found."
             )
 
         if inviting_user.remaining_connections <= 0:
-            print("remaining connections = 0")
+            logger.error(f"Can't create connect, {inviting_user.phonenumber} has {inviting_user.remaining_connections}.")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Cannot create connection. Inviting user has reached maximum connections.",
@@ -142,6 +149,7 @@ async def connect_by_code_route(
             user2=current_user_phonenumber,
             session=session,
         ):
+            logger.error(f"{inviting_user_phonenumber.phonenumber} and {current_user_phonenumber.phonenumber} are already connected", stack_info=True)
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Cannot create connection. Users are already directly connected.",
@@ -163,9 +171,11 @@ async def connect_by_code_route(
             "remaining_connections": updated_num_of_connection,
         }
     except HTTPException as e:
-        raise HTTPException(status_code=e.status_code, detail=e.detail)
+        logger.exception(f"Exception occurred: {e}", stack_info=True)
+        raise HTTPException(status_code=e.status_code, detail="Something went wrong. Please try again later")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Server error: {str(e)}")
+        logger.exception(f"Server occurred: {e}", stack_info=True)
+        raise HTTPException(status_code=500, detail=f"Server error occurred.")
 
 
 @user_router.get("/graph", status_code=status.HTTP_200_OK)
@@ -184,7 +194,8 @@ async def get_user_graph_route(
             user1=current_user_phonenumber, session=session, degrees=degrees
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Server Error: {str(e)}")
+        logger.exception(f"Server Error: {e}", stack_info=True)
+        raise HTTPException(status_code=500, detail=f"Something went wrong, please try again later.")
 
 @user_router.get(
     "/code/{code}", response_model=MinimalUser, status_code=status.HTTP_200_OK
@@ -196,6 +207,7 @@ async def search_user_by_code(
     """Searches for a user based on invite code."""
     response: UserInDb = await find_user_by_invite_code(invite_code=code, session=session)
     if not response:
+        logger.error(f"Code: {code} is invalid or user doesn't exist in DB.")
         raise HTTPException(status_code=404, detail="User not found in DB or Invite Code not valid")
 
     # remove the phone number so we don't send it
@@ -234,6 +246,7 @@ async def get_shortest_path_to_user(
         )
         return ShortestPathResponse.from_nodes(path.connections)
     except ValueError:
+        logger.error(f"No path found between {receiver.phonenumber} and {phonenumber}", stack_info=True, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Path Not Found"
         )
@@ -250,8 +263,9 @@ async def get_shortest_path_to_user_by_id(
         # Get the target user by ID
         target_user = await get_user_in_db_by_id(user_id=user_id, session=session)
         if not target_user:
+            logger.error("Target user not found", stack_info=True)
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Target user not found"
+                status_code=status.HTTP_404_NOT_FOUND, detail="Target user not found."
             )
 
         # Convert to UserPhonenumber for the find_shortest_path function
@@ -264,7 +278,8 @@ async def get_shortest_path_to_user_by_id(
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"Server error: {e}",stack_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Server Error: {str(e)}",
+            detail=f"Server Error. Please try again later."
         )
