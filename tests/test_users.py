@@ -37,7 +37,7 @@ def test_create_user(client, test_neo4j_session):
         "hashed_password": "fakehashedpassword",
     }
 
-    response = client.post("/users/", json=test_user)
+    response = client.post("/users?password=password", json=test_user)
     assert response.status_code == 201
 
     data = response.json()
