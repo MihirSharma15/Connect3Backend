@@ -32,6 +32,9 @@ from app.services.twilio import (
     send_sms,
     verify_OTP_text,
 )
+from app.logger import get_logger
+
+logger = get_logger(__name__)
 
 auth_router = APIRouter(
     prefix="/auth",
@@ -51,9 +54,11 @@ async def send_otp_code_route(
 ):
     """This route sends an OTP code to the given phone number"""
     try:
+        logger.info(f"Sending OTP to {phonenumber.phonenumber}")
         return send_OTP_text(phonenumber=phonenumber, service=twilio_service)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to send OTP: {str(e)}")
+        logger.exception(f"Failed to send OTP to {phonenumber.phonenumber}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to send OTP.")
 
 
 @auth_router.post(
@@ -69,16 +74,20 @@ async def verify_otp_code_route(
         verification: TwilioVerificationModel = verify_OTP_text(
             verification_code=verification_code, service=twilio_service
         )
+        logger.info(f"Verifying code gets sent to {verification.to}")
         if verification.status == "approved":
             token = create_access_token(data={"sub": str(verification.to)})
             verification.phone_verification_token = Token(
                 access_token=token, token_type="bearer"
             )
+
             return verification
         else:
+            logger.warning(f"Verification wasn't approved. Status: {verification.status}")
             return verification
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to verify OTP: {str(e)}")
+        logger.exception(f"Error in verifying OTP: {e}.", stack_info=True)
+        raise HTTPException(status_code=500, detail=f"We are unable to verify your OTP at this time")
 
 
 @auth_router.post(
@@ -107,6 +116,7 @@ async def signup_user_route(
         )
         # check if the token is valid
         if not valid_token:
+            logger.error(f"Not a valid verifcation token, {verification_token} is invalid", stack_info=True)
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid Phone Verification Token",
@@ -122,6 +132,7 @@ async def signup_user_route(
         )
 
         if not inviting_user:
+            logger.error(f"Code {invite_code} is invalid")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invite code is invalid.",
@@ -132,6 +143,7 @@ async def signup_user_route(
         num_connections = await get_num_of_connections(inviting_user_phonenumber)
 
         if num_connections <= 0:
+            logger.error(f"Inviting user {inviting_user_phonenumber.phonenumber} has {num_connections} left")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Inviting User already reached maximum connections.",
@@ -157,10 +169,12 @@ async def signup_user_route(
         return created_user
 
     except HTTPException as e:
+        logger.exception(f"User {user_phonenumber.phonenumber} signup failed: {e}", stack_info=True)
         raise HTTPException(
-            status_code=e.status_code, detail=f"Failed to Sign up user: {str(e.detail)}"
+            status_code=e.status_code, detail=f" Signup failed. Please try again later"
         )
     except Exception as e:
+        logger.exception(f"Unexepected error in signup of {user.phonenumber}: {e}", stack_info=True)
         raise HTTPException(status_code=500, detail=f"Unexpected Error: {str(e)}")
 
 
@@ -173,6 +187,7 @@ async def login_for_access_token(
         phonenumber=form_data.username, password=form_data.password, session=session
     )
     if not user:
+        logger.error("Incorrect username or password", stack_info=True)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect Username or Password",
