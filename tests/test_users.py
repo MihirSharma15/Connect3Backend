@@ -654,7 +654,7 @@ def test_user_shortest_path_by_id_not_found(client, test_neo4j_session):
     # Try to find path to non-existent user
     response = client.get("/users/id/non-existent-user-id/shortest-path")
     assert response.status_code == 404
-    assert response.json()["detail"] == "Target user not found"
+    assert response.json()["detail"] == "Target user not found."
 
 
 def test_user_shortest_path_complex_chain(client, test_neo4j_session):
