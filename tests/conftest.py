@@ -34,6 +34,7 @@ def wait_for_neo4j(url="http://localhost:7474", timeout=60):
         except requests.exceptions.RequestException as e:
             logger.debug("Waiting for Neo4j: %s", e)
         time.sleep(1)
+        logger.info("Waiting for Neo4j to become available...(%s seconds)", time.time() - start_time)
         if time.time() - start_time > timeout:
             raise TimeoutError("Timed out waiting for Neo4j to become available.")
 
@@ -171,6 +172,10 @@ def client(test_neo4j_session):
             "remaining_connections": 3,
             "is_verified": True,
             "invite_code": "ABCDE",
+            "status_content": "",
+            "status_degree": 0,
+            "status_created_at": "",
+            "status_expired_at": "",
         }
         return UserInDb(**data)
 

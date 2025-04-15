@@ -1,4 +1,5 @@
 # tests/test_users.py
+import datetime
 import logging
 from fastapi.testclient import TestClient
 from app.main import app
@@ -211,7 +212,6 @@ def test_create_connection_route_invalid_phone(client, test_neo4j_session):
     assert True == True
 
 
-# DOESN'T WORK - something is wrong with the API logic. It's givng and empty server error too which isn't helpful. Could be the fact that this is a json instead of a query
 def test_users_connect_by_code(client, test_neo4j_session):
     """Test for connecting users with connection code."""
     current_user = {
@@ -258,6 +258,10 @@ def test_graph_user(client, test_neo4j_session):
         "remaining_connections": 3,
         "is_verified": True,
         "invite_code": "abc",
+        "status_content": "Test status",
+        "status_degree": 2,
+        "status_created_at": "2024-04-15T12:00:00",
+        "status_expired_at": "2024-04-16T12:00:00",
     }
     mock_user2 = {
         "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d3",
@@ -268,6 +272,10 @@ def test_graph_user(client, test_neo4j_session):
         "remaining_connections": 3,
         "is_verified": True,
         "invite_code": "abcd",
+        "status_content": "Another status",
+        "status_degree": 1,
+        "status_created_at": "2024-04-15T12:00:00",
+        "status_expired_at": "2024-04-16T12:00:00",
     }
     mock_response = {
         "nodes": [
@@ -298,6 +306,9 @@ def test_graph_user(client, test_neo4j_session):
     assert data["edges"][0]["target"] == mock_response["edges"][0]["target"]
     assert data["nodes"][0]["user_id"] == mock_response["nodes"][0]["user_id"]
     assert data["nodes"][0]["name"] == mock_response["nodes"][0]["name"]
+    
+    # Verify presence of status fields without checking specific values
+    assert "status" in data["nodes"][0]
 
 
 def test_graph_user_multiple_degrees_centered_on_current_user(
@@ -330,6 +341,10 @@ def test_graph_user_multiple_degrees_centered_on_current_user(
         "remaining_connections": 3,
         "is_verified": True,
         "invite_code": "ABC",
+        "status_content": "Current user status",
+        "status_degree": 1,
+        "status_created_at": "2024-04-15T12:00:00",
+        "status_expired_at": "2024-04-16T12:00:00",
     }
 
     # Define extra users to create a chain
@@ -342,6 +357,10 @@ def test_graph_user_multiple_degrees_centered_on_current_user(
         "remaining_connections": 3,
         "is_verified": True,
         "invite_code": "code2",
+        "status_content": "User2 status",
+        "status_degree": 2,
+        "status_created_at": "2024-04-15T12:00:00",
+        "status_expired_at": "2024-04-16T12:00:00",
     }
     user_3_data = {
         "user_id": "33333333-3333-3333-3333-333333333333",
@@ -352,6 +371,10 @@ def test_graph_user_multiple_degrees_centered_on_current_user(
         "remaining_connections": 3,
         "is_verified": True,
         "invite_code": "code3",
+        "status_content": "User3 status",
+        "status_degree": 1,
+        "status_created_at": "2024-04-15T12:00:00",
+        "status_expired_at": "2024-04-16T12:00:00",
     }
     user_4_data = {
         "user_id": "44444444-4444-4444-4444-444444444444",
@@ -362,6 +385,10 @@ def test_graph_user_multiple_degrees_centered_on_current_user(
         "remaining_connections": 3,
         "is_verified": True,
         "invite_code": "code4",
+        "status_content": "User4 status",
+        "status_degree": 3,
+        "status_created_at": "2024-04-15T12:00:00",
+        "status_expired_at": "2024-04-16T12:00:00",
     }
     user_5_data = {
         "user_id": "55555555-5555-5555-5555-555555555555",
@@ -372,6 +399,10 @@ def test_graph_user_multiple_degrees_centered_on_current_user(
         "remaining_connections": 3,
         "is_verified": True,
         "invite_code": "code5",
+        "status_content": "User5 status",
+        "status_degree": 0,
+        "status_created_at": "2024-04-15T12:00:00",
+        "status_expired_at": "2024-04-16T12:00:00",
     }
 
     # Create all users in DB
@@ -412,6 +443,9 @@ def test_graph_user_multiple_degrees_centered_on_current_user(
     assert user_4.user_id not in returned_nodes_2
     assert user_5.user_id not in returned_nodes_2
 
+    # Check status fields are present for at least one node
+    assert any("status" in node for node in graph_deg_2["nodes"])
+
     # Verify edges (they should only be (U1-U2) and (U2-U3))
     expected_edges_2 = {
         (user_1.user_id, user_2.user_id),
@@ -440,6 +474,9 @@ def test_graph_user_multiple_degrees_centered_on_current_user(
     assert user_3.user_id in returned_nodes_4
     assert user_4.user_id in returned_nodes_4
     assert user_5.user_id in returned_nodes_4
+
+    # Check status fields are present for at least one node
+    assert any("status" in node for node in graph_deg_4["nodes"])
 
     # Verify edges (full chain)
     expected_edges_4 = {
@@ -900,6 +937,10 @@ def test_graph_user_no_connections(client, test_neo4j_session):
         "remaining_connections": 3,
         "is_verified": True,
         "invite_code": "ABCDE",
+        "status_content": "Solo user status",
+        "status_degree": 2,
+        "status_created_at": "2024-04-15T12:00:00",
+        "status_expired_at": "2024-04-16T12:00:00",
     }
     util_create_user(current_user, test_neo4j_session)
 
@@ -913,5 +954,267 @@ def test_graph_user_no_connections(client, test_neo4j_session):
     assert data["nodes"][0]["user_id"] == current_user["user_id"]
     assert data["nodes"][0]["name"] == current_user["name"]
     
+    # Verify status is present
+    assert "status" in data["nodes"][0]
+
     # Verify no edges exist
     assert len(data["edges"]) == 0
+
+
+def test_update_user_status_success(client, test_neo4j_session):
+    """Test successful update of a user's status"""
+    # Create a test user
+    mock_user = {
+        "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d2",
+        "name": "John Doe",
+        "phonenumber": "+19999999999",
+        "hashed_password": "fakehashedpassword",
+        "created_at": "1-1-1970",
+        "remaining_connections": 3,
+        "is_verified": True,
+        "invite_code": "ABCDE",
+        "status_content": "",
+        "status_degree": 0,
+        "status_created_at": "",
+        "status_expired_at": "",
+    }
+    util_create_user(mock_user, test_neo4j_session)
+
+    # Update status
+    status_data = {
+        "status_content": "Feeling great today!",
+        "status_degree": 2,
+    }
+    response = client.post("/status", json=status_data)
+    assert response.status_code == 201
+
+
+def test_update_user_status_invalid_degree(client, test_neo4j_session):
+    """Test status update with invalid degree value"""
+    # Create a test user
+    mock_user = {
+        "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d2",
+        "name": "John Doe",
+        "phonenumber": "+19999999999",
+        "hashed_password": "fakehashedpassword",
+        "created_at": "1-1-1970",
+        "remaining_connections": 3,
+        "is_verified": True,
+        "invite_code": "ABCDE",
+        "status_content": "",
+        "status_degree": 0,
+        "status_created_at": "",
+        "status_expired_at": "",
+    }
+    util_create_user(mock_user, test_neo4j_session)
+
+    # Try to update status with negative degree
+    status_data = {
+        "status_content": "Invalid status",
+        "status_degree": -1,
+    }
+    response = client.post("/status", json=status_data)
+    assert response.status_code == 400
+
+
+def test_graph_user_status_degree_filtering(client, test_neo4j_session):
+    """
+    Test that statuses are properly filtered based on their degree setting.
+    
+    This test creates a chain of users:
+    U1 -> U2 -> U3 -> U4
+    
+    Where:
+    - U1 is the current user
+    - U4 has a status with degree=2
+    
+    When U1 requests a graph with degree=3, they should:
+    - See U4 as a node (since U4 is within 3 degrees)
+    - NOT see U4's status (since it's set to be visible only up to 2 degrees away)
+    """
+    # Get current timestamp for fresh statuses
+    now = datetime.datetime.now()
+    fresh_timestamp = now.isoformat()
+    future_expiry = (now + datetime.timedelta(hours=23)).isoformat()
+    
+    # Create a chain of users
+    user_1_data = {
+        "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d2",  # Current user
+        "name": "Current User",
+        "phonenumber": "+19999999999",
+        "hashed_password": "fakehashedpassword",
+        "created_at": "1-1-1970",
+        "remaining_connections": 3,
+        "is_verified": True,
+        "invite_code": "CODE1",
+        "status_content": "Current user status",
+        "status_degree": 3,
+        "status_created_at": fresh_timestamp,
+        "status_expired_at": future_expiry,
+    }
+    
+    user_2_data = {
+        "user_id": "user2-id",
+        "name": "User 2",
+        "phonenumber": "+19999999992",
+        "hashed_password": "fakehashedpassword",
+        "created_at": "1-1-1970",
+        "remaining_connections": 3,
+        "is_verified": True,
+        "invite_code": "CODE2",
+        "status_content": "User 2 status",
+        "status_degree": 3,
+        "status_created_at": fresh_timestamp,
+        "status_expired_at": future_expiry,
+    }
+    
+    user_3_data = {
+        "user_id": "user3-id",
+        "name": "User 3",
+        "phonenumber": "+19999999993",
+        "hashed_password": "fakehashedpassword",
+        "created_at": "1-1-1970",
+        "remaining_connections": 3,
+        "is_verified": True,
+        "invite_code": "CODE3",
+        "status_content": "User 3 status",
+        "status_degree": 3,
+        "status_created_at": fresh_timestamp,
+        "status_expired_at": future_expiry,
+    }
+    
+    user_4_data = {
+        "user_id": "user4-id",
+        "name": "User 4",
+        "phonenumber": "+19999999994",
+        "hashed_password": "fakehashedpassword",
+        "created_at": "1-1-1970",
+        "remaining_connections": 3,
+        "is_verified": True,
+        "invite_code": "CODE4",
+        "status_content": "User 4 status - limited visibility",
+        "status_degree": 2,  # This status should only be visible up to 2 degrees away
+        "status_created_at": fresh_timestamp,
+        "status_expired_at": future_expiry,
+    }
+    
+    # Create users in DB
+    util_create_user(user_1_data, test_neo4j_session)
+    util_create_user(user_2_data, test_neo4j_session)
+    util_create_user(user_3_data, test_neo4j_session)
+    util_create_user(user_4_data, test_neo4j_session)
+    
+    # Convert to UserInDb objects for creating connections
+    user_1 = UserInDb(**user_1_data)
+    user_2 = UserInDb(**user_2_data)
+    user_3 = UserInDb(**user_3_data)
+    user_4 = UserInDb(**user_4_data)
+    
+    # Create connections forming a chain: U1 -> U2 -> U3 -> U4
+    util_create_connection(user_1, user_2, test_neo4j_session)
+    util_create_connection(user_2, user_3, test_neo4j_session)
+    util_create_connection(user_3, user_4, test_neo4j_session)
+    
+    # Request graph with degree=3 (should include all users)
+    response = client.get("/users/graph", params={"degrees": 3})
+    assert response.status_code == 200
+    graph_data = response.json()
+    
+    # Verify all users are in the graph
+    user_ids = {node["user_id"] for node in graph_data["nodes"]}
+    assert user_1_data["user_id"] in user_ids
+    assert user_2_data["user_id"] in user_ids
+    assert user_3_data["user_id"] in user_ids
+    assert user_4_data["user_id"] in user_ids
+    
+    # Find user 4 in the response
+    user4_node = next((node for node in graph_data["nodes"] if node["user_id"] == user_4_data["user_id"]), None)
+    assert user4_node is not None
+    
+    # Key test: User 4's status should NOT be visible since its degree=2 and we're 3 degrees away
+    assert user4_node["status"] is None, "User 4's status should be filtered out due to degree restriction"
+    
+    # But closer users' statuses should be visible
+    user2_node = next((node for node in graph_data["nodes"] if node["user_id"] == user_2_data["user_id"]), None)
+    user3_node = next((node for node in graph_data["nodes"] if node["user_id"] == user_3_data["user_id"]), None)
+    
+    assert user2_node["status"] is not None, "User 2's status should be visible"
+    assert user3_node["status"] is not None, "User 3's status should be visible"
+
+
+def test_graph_user_expired_status_filtering(client, test_neo4j_session):
+    """
+    Test that expired statuses (older than 24 hours) are filtered out properly.
+    
+    Creates a user with an old status and verifies it's not visible in the graph.
+    """
+    # Get current timestamp and create timestamps for testing
+    now = datetime.datetime.now()
+    old_timestamp = (now - datetime.timedelta(hours=25)).isoformat()
+    fresh_timestamp = now.isoformat()
+    future_expiry = (now + datetime.timedelta(hours=23)).isoformat()
+    
+    # Create current user with an expired status
+    current_user = {
+        "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d2",  # Current user
+        "name": "John Doe",
+        "phonenumber": "+19999999999",
+        "hashed_password": "fakehashedpassword",
+        "created_at": "1-1-1970",
+        "remaining_connections": 3,
+        "is_verified": True,
+        "invite_code": "CODE1",
+        "status_content": "This is an old status that should be filtered",
+        "status_degree": 3,
+        "status_created_at": old_timestamp,
+        "status_expired_at": (now - datetime.timedelta(hours=1)).isoformat(),
+    }
+    
+    # Create a connected user with a fresh status
+    connected_user = {
+        "user_id": "fresh-status-user-id",  # Different user ID
+        "name": "Fresh Status User",
+        "phonenumber": "+19999999992",
+        "hashed_password": "fakehashedpassword",
+        "created_at": "1-1-1970",
+        "remaining_connections": 3,
+        "is_verified": True,
+        "invite_code": "CODE2",
+        "status_content": "This is a fresh status that should be visible",
+        "status_degree": 3,
+        "status_created_at": fresh_timestamp,
+        "status_expired_at": future_expiry,
+    }
+    
+    # Create users in DB
+    util_create_user(current_user, test_neo4j_session)
+    util_create_user(connected_user, test_neo4j_session)
+    
+    # Connect the users
+    user_1 = UserInDb(**current_user)
+    user_2 = UserInDb(**connected_user)
+    util_create_connection(user_1, user_2, test_neo4j_session)
+    
+    # Request graph
+    response = client.get("/users/graph", params={"degrees": 1})
+    assert response.status_code == 200
+    graph_data = response.json()
+    
+    # Verify nodes exist
+    user_ids = {node["user_id"] for node in graph_data["nodes"]}
+    assert current_user["user_id"] in user_ids
+    assert connected_user["user_id"] in user_ids
+    
+    # Find current user in the response
+    current_user_node = next((node for node in graph_data["nodes"] if node["user_id"] == current_user["user_id"]), None)
+    assert current_user_node is not None
+    
+    # Key test: Current user's status should be filtered out due to age
+    assert current_user_node["status"] is None, "Expired status should be filtered out"
+    
+    # Connected user's status should be visible
+    connected_user_node = next((node for node in graph_data["nodes"] if node["user_id"] == connected_user["user_id"]), None)
+    assert connected_user_node["status"] is not None, "Fresh status should be visible"
+    assert connected_user_node["status"]["status_content"] == connected_user["status_content"]
+
+

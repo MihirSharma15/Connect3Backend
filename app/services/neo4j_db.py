@@ -7,23 +7,29 @@ General rule of thumb, all raw cypher queries get put in here
 
 # external
 from collections import deque
+from collections import deque
 import datetime
+import logging
 from fastapi import HTTPException, Request
 from neo4j import Session
 from typing import Optional
 from functools import lru_cache
 
 # internal
+from app.schemas.status import MinimalStatus, StatusInput
 from app.schemas.users import (
     BaseUser,
     GraphEdge,
     GraphResponse,
     MinimalUser,
+    MinimalUserWithStatus,
     UserConnections,
     UserInDb,
     UserPhonenumber,
 )
 from app.utils.utils import generate_five_alphanumeric_code
+
+logger = logging.getLogger(__name__)
 
 
 # HELPER METHODS
@@ -73,7 +79,11 @@ async def create_user_in_db(user: BaseUser, session: Session) -> UserInDb:
         created_at: $created_at,
         remaining_connections: $remaining_connections,
         is_verified: $is_verified,
-        invite_code: $invite_code
+        invite_code: $invite_code,
+        status_content: $status_content,
+        status_degree: $status_degree,
+        status_created_at: $status_created_at,
+        status_expired_at: $status_expired_at
     })
     RETURN u
     """
@@ -86,6 +96,10 @@ async def create_user_in_db(user: BaseUser, session: Session) -> UserInDb:
         "created_at": str(datetime.datetime.now()),
         "remaining_connections": 3,
         "invite_code": generate_five_alphanumeric_code(),
+        "status_content": "",
+        "status_degree": 0,
+        "status_created_at": "",
+        "status_expired_at": "",
     }
 
     result = session.run(query, **params)
@@ -107,6 +121,11 @@ async def create_user_in_db(user: BaseUser, session: Session) -> UserInDb:
         remaining_connections=int(node.get("remaining_connections", 0)),
         is_verified=node.get("is_verified", False),
         invite_code=node.get("invite_code", ""),
+        status=MinimalStatus(
+            status_content=node.get("status_content", ""),
+            status_degree=int(node.get("status_degree", 0)),
+            status_created_at=node.get("status_created_at", ""),
+        ),
     )
 
     return created_user
@@ -138,6 +157,11 @@ async def get_user_in_db(phonenumber: str, session: Session) -> Optional[UserInD
         remaining_connections=node["remaining_connections"],
         is_verified=(node["is_verified"] or True),
         invite_code=(node["invite_code"] or ""),
+        status=MinimalStatus(
+            status_content=node["status_content"],
+            status_degree=(node["status_degree"] or 0),
+            status_created_at=node["status_created_at"],
+        ),
     )  # invite_code may not exist for all users
 
     return found_user
@@ -169,6 +193,11 @@ async def get_user_in_db_by_id(user_id: str, session: Session) -> Optional[UserI
         remaining_connections=node["remaining_connections"],
         is_verified=node["is_verified"] or True,
         invite_code=node["invite_code"] or "",
+        status=MinimalStatus(
+            status_content=(node["status_content"] or ""),
+            status_degree=(node["status_degree"] or 0),
+            status_created_at=(node["status_created_at"] or ""),
+        ),
     )  # invite_code may not exist for all users
 
     return found_user
@@ -206,8 +235,13 @@ async def find_user_by_invite_code(
         hashed_password=node["hashed_password"],
         created_at=node["created_at"],
         remaining_connections=node["remaining_connections"],
-        is_verified=(node["is_verified"] or True),
-        invite_code=(node["invite_code"] or ""),
+        is_verified=node["is_verified"] or True,
+        invite_code=node["invite_code"] or "",
+        status=MinimalStatus(
+            status_content=(node["status_content"] or ""),
+            status_degree=int((node["status_degree"] or 0)),
+            status_created_at=(node["status_created_at"] or ""),
+        ),
     )  # invite_code may not exist for all users
 
     return found_user
@@ -325,7 +359,10 @@ async def get_connections(user1: UserPhonenumber, session: Session) -> UserConne
     for node in connection_nodes:
         connections_list.append(
             MinimalUser(
-                id=node["user_id"], name=node["name"], phonenumber=node["phonenumber"], remaining_connections=node["remaining_connections"]
+                id=node["user_id"],
+                name=node["name"],
+                phonenumber=node["phonenumber"],
+                remaining_connections=node["remaining_connections"],
             )
         )
     return UserConnections(connections=connections_list)
@@ -433,7 +470,19 @@ async def get_user_graph(
         node_data = dict(node)
         node_data["degree"] = None  # Will be updated via BFS.
         node_data["phonenumber"] = None  # Hide the phone if required.
-        node_dict[user_id] = MinimalUser(**node_data)
+        
+        # Initially create all nodes with their data, we'll filter statuses later
+        node_dict[user_id] = MinimalUserWithStatus(
+            user_id=node_data["user_id"],
+            name=node_data["name"],
+            phonenumber=node_data["phonenumber"],
+            remaining_connections=node_data["remaining_connections"],
+            status=MinimalStatus(
+                status_content=(node_data["status_content"] or ""),
+                status_degree=int(node_data["status_degree"] or 0),
+                status_created_at=(node_data["status_created_at"] or ""),
+            ),
+        )
 
     # Create an undirected graph (adjacency list) from the relationships.
     # This ensures that every edge is considered when computing degrees.
@@ -463,6 +512,32 @@ async def get_user_graph(
             if neighbor not in visited:
                 queue.append((neighbor, dist + 1))
 
+    # Now filter statuses based on degree restrictions
+    for node_id, node in node_dict.items():
+        # Get the node's distance from the current user
+        node_degree = node.degree
+        
+        # Check for expired status (older than 24 hours)
+        if node.status and node.status.status_created_at and node.status.status_content:
+            try:
+                status_time = datetime.datetime.fromisoformat(node.status.status_created_at)
+                current_time = datetime.datetime.now()
+                # If status is older than 24 hours, set it to None
+                if (current_time - status_time).total_seconds() > 24 * 60 * 60:
+                    node.status = None
+                    continue  # Skip degree check if already filtered out
+            except (ValueError, TypeError):
+                # If we can't parse the timestamp, continue with degree checks
+                pass
+        
+        # Get the status degree restriction
+        if node.status and hasattr(node.status, 'status_degree'):
+            status_degree = node.status.status_degree
+            
+            # If node's distance is greater than status degree, set status to None
+            if node_degree is not None and status_degree is not None and node_degree > status_degree:
+                node.status = None
+
     # Process relationships to build the list of edges.
     # We add an edge only if both endpoints are in our processed node dictionary.
     edges_set = set()
@@ -475,3 +550,54 @@ async def get_user_graph(
     edges = [GraphEdge(source=src, target=tgt) for src, tgt in edges_set]
 
     return GraphResponse(nodes=list(node_dict.values()), edges=edges)
+
+
+async def get_user_status(user: UserPhonenumber, session: Session) -> MinimalStatus:
+    """Gets the status of a user in the db"""
+    query = """
+    MATCH (u:User {phonenumber: $phone})
+    RETURN u.status_content, u.status_degree, u.status_created_at
+    """
+    try:
+        result = session.run(query=query, phone=user.phonenumber)
+        record = result.single()
+        if not record:
+            raise ValueError("User not found")
+        return MinimalStatus(
+            status_content=record["status_content"],
+            status_degree=record["status_degree"],
+            status_created_at=record["status_created_at"],
+        )
+    except ValueError:
+        raise ValueError("User not found")
+
+
+async def update_user_status(
+    user: UserPhonenumber, status: StatusInput, session: Session
+) -> None:
+    """Updates the status of a user in the db"""
+    query = """
+    MATCH (u:User {phonenumber: $phone})
+    SET u.status_content = $status_content,
+        u.status_degree = $status_degree,
+        u.status_created_at = $status_created_at,
+        u.status_expired_at = $status_expired_at
+    RETURN u
+    """
+
+    try:
+        result = session.run(
+            query=query,
+            phone=user.phonenumber,
+            status_content=status.status_content,
+            status_degree=status.status_degree,
+            status_created_at=str(datetime.datetime.now()),
+            status_expired_at=str(datetime.datetime.now() + datetime.timedelta(days=1)),
+        )
+
+        record = result.single()
+        if not record:
+            raise ValueError("User not found")
+
+    except Exception as e:
+        raise ValueError(f"Failed to update status: {str(e)}")

@@ -8,8 +8,7 @@ from contextlib import asynccontextmanager
 
 # internal
 from app.core.config import settings
-from app.routes.auth import auth_router
-from app.routes.users import user_router
+from app.routes import auth, status_content, users
 from app.services.neo4j_db import get_neo4j_driver
 
 
@@ -48,8 +47,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(user_router)
-app.include_router(auth_router)
+# Include all routers
+app.include_router(status_content.status_router)
+app.include_router(users.user_router)
+app.include_router(auth.auth_router)
 
 
 @app.get("/", status_code=status.HTTP_200_OK)
@@ -66,7 +67,7 @@ async def health(db: Annotated[GraphDatabase, Depends(get_neo4j_driver)]):
         db_status = "ok"
     except Exception:
         raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            status_code=status_content.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Neo4j database connectivity error",
         )
 

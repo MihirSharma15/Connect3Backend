@@ -3,6 +3,7 @@ from typing import List, Optional, Union
 
 # internal
 from app.schemas.auth import Token
+from app.schemas.status import MinimalStatus
 from app.schemas.usphonenumber import USPhoneNumber
 
 
@@ -52,6 +53,7 @@ class UserInDb(BaseModel):
     remaining_connections: int
     is_verified: bool
     invite_code: str
+    status: Optional[MinimalStatus] = None
 
 
 class MinimalUser(BaseModel):
@@ -64,6 +66,12 @@ class MinimalUser(BaseModel):
     )
     degree: Optional[int] = None
     remaining_connections: Optional[int] = None
+
+
+class MinimalUserWithStatus(MinimalUser):
+    """A minimal user model that also gives status"""
+
+    status: Optional[MinimalStatus] = None
 
 
 class UserConnections(BaseModel):
@@ -97,7 +105,7 @@ class GraphEdge(BaseModel):
 class GraphResponse(BaseModel):
     """Model that describes the response of the graph query"""
 
-    nodes: List[MinimalUser] = Field(default_factory=list)
+    nodes: List[MinimalUserWithStatus] = Field(default_factory=list)
     edges: List[GraphEdge] = Field(default_factory=list)
 
 
