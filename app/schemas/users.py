@@ -12,7 +12,6 @@ class BaseUser(BaseModel):
     name: Optional[str] = str
     phonenumber: USPhoneNumber
     hashed_password: Optional[str] = str
-    status: Optional[MinimalStatus] = None
 
 
 class UserPhonenumber(BaseModel):
@@ -67,6 +66,11 @@ class MinimalUser(BaseModel):
     )
     degree: Optional[int] = None
     remaining_connections: Optional[int] = None
+
+
+class MinimalUserWithStatus(MinimalUser):
+    """A minimal user model that also gives status"""
+
     status: Optional[MinimalStatus] = None
 
 
@@ -101,7 +105,7 @@ class GraphEdge(BaseModel):
 class GraphResponse(BaseModel):
     """Model that describes the response of the graph query"""
 
-    nodes: List[MinimalUser] = Field(default_factory=list)
+    nodes: List[MinimalUserWithStatus] = Field(default_factory=list)
     edges: List[GraphEdge] = Field(default_factory=list)
 
 

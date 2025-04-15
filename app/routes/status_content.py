@@ -13,7 +13,7 @@ logger = get_logger(__name__)
 status_router = APIRouter(prefix="/users/status", tags=["status"])
 
 
-@status_router.put("/", status_code=status.HTTP_201_CREATED)
+@status_router.put("", status_code=status.HTTP_201_CREATED)
 async def update_status_route(
     status: StatusInput,
     current_user: Annotated[BaseUser, Depends(get_current_user)],

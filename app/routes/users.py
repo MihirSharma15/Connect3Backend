@@ -61,7 +61,6 @@ async def create_user(
         )
 
 
-
 @user_router.post("/connect", status_code=status.HTTP_201_CREATED)
 async def create_connection_route(
     receiver_number: USPhoneNumber,
@@ -219,7 +218,7 @@ async def get_user_graph_route(
     except Exception as e:
         logger.exception(f"Server Error: {e}", stack_info=True)
         raise HTTPException(
-            status_code=500, detail="Something went wrong, please try again later."
+            status_code=500, detail=f"Server Error. Please try again later: {str(e)}"
         )
 
 

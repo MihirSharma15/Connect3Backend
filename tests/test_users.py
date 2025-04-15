@@ -1,4 +1,5 @@
 # tests/test_users.py
+import datetime
 import logging
 from fastapi.testclient import TestClient
 from app.main import app
@@ -928,6 +929,10 @@ def test_update_user_status_success(client, test_neo4j_session):
         "remaining_connections": 3,
         "is_verified": True,
         "invite_code": "ABCDE",
+        "status_content": "",
+        "status_degree": 0,
+        "status_created_at": "",
+        "status_expired_at": "",
     }
     util_create_user(mock_user, test_neo4j_session)
 
@@ -935,18 +940,16 @@ def test_update_user_status_success(client, test_neo4j_session):
     status_data = {
         "status_content": "Feeling great today!",
         "status_degree": 2,
-        "status_created_at": "2024-04-15T12:00:00",
-        "status_expired_at": "2024-04-16T12:00:00",
     }
     response = client.post("/users/status", json=status_data)
     assert response.status_code == 200
 
     # Verify status was updated
     data = response.json()
-    assert data["status"]["status_content"] == status_data["status_content"]
-    assert data["status"]["status_degree"] == status_data["status_degree"]
-    assert data["status"]["status_created_at"] == status_data["status_created_at"]
-    assert data["status"]["status_expired_at"] == status_data["status_expired_at"]
+    assert data["status_content"] == status_data["status_content"]
+    assert data["status_degree"] == status_data["status_degree"]
+    assert data["status_created_at"] == datetime.now().isoformat()
+    assert data["status_expired_at"] == datetime.now() + datetime.timedelta(days=1)
 
 
 def test_update_user_status_invalid_degree(client, test_neo4j_session):
@@ -961,6 +964,10 @@ def test_update_user_status_invalid_degree(client, test_neo4j_session):
         "remaining_connections": 3,
         "is_verified": True,
         "invite_code": "ABCDE",
+        "status_content": "",
+        "status_degree": 0,
+        "status_created_at": "",
+        "status_expired_at": "",
     }
     util_create_user(mock_user, test_neo4j_session)
 
@@ -989,12 +996,10 @@ def test_get_statuses_with_degree_filter(client, test_neo4j_session):
             "remaining_connections": 3,
             "is_verified": True,
             "invite_code": "CODE1",
-            "status": {
-                "status_content": "Status for all",
-                "status_degree": 3,
-                "status_created_at": "2024-04-15T12:00:00",
-                "status_expired_at": "2024-04-16T12:00:00",
-            },
+            "status_content": "Status for all",
+            "status_degree": 3,
+            "status_created_at": "2024-04-15T12:00:00",
+            "status_expired_at": "2024-04-16T12:00:00",
         },
         {
             "user_id": "user2",
@@ -1005,12 +1010,10 @@ def test_get_statuses_with_degree_filter(client, test_neo4j_session):
             "remaining_connections": 3,
             "is_verified": True,
             "invite_code": "CODE2",
-            "status": {
-                "status_content": "Status for close friends",
-                "status_degree": 1,
-                "status_created_at": "2024-04-15T12:00:00",
-                "status_expired_at": "2024-04-16T12:00:00",
-            },
+            "status_content": "Status for close friends",
+            "status_degree": 1,
+            "status_created_at": "2024-04-15T12:00:00",
+            "status_expired_at": "2024-04-16T12:00:00",
         },
         {
             "user_id": "user3",
@@ -1021,12 +1024,10 @@ def test_get_statuses_with_degree_filter(client, test_neo4j_session):
             "remaining_connections": 3,
             "is_verified": True,
             "invite_code": "CODE3",
-            "status": {
-                "status_content": "Status for friends of friends",
-                "status_degree": 2,
-                "status_created_at": "2024-04-15T12:00:00",
-                "status_expired_at": "2024-04-16T12:00:00",
-            },
+            "status_content": "Status for friends of friends",
+            "status_degree": 2,
+            "status_created_at": "2024-04-15T12:00:00",
+            "status_expired_at": "2024-04-16T12:00:00",
         },
         {
             "user_id": "user4",
@@ -1037,12 +1038,10 @@ def test_get_statuses_with_degree_filter(client, test_neo4j_session):
             "remaining_connections": 3,
             "is_verified": True,
             "invite_code": "CODE4",
-            "status": {
-                "status_content": "Private status",
-                "status_degree": 0,
-                "status_created_at": "2024-04-15T12:00:00",
-                "status_expired_at": "2024-04-16T12:00:00",
-            },
+            "status_content": "Private status",
+            "status_degree": 0,
+            "status_created_at": "2024-04-15T12:00:00",
+            "status_expired_at": "2024-04-16T12:00:00",
         },
     ]
 
@@ -1069,8 +1068,8 @@ def test_get_statuses_with_degree_filter(client, test_neo4j_session):
     # - User3's status (degree=2, we're within 2 degrees)
     # Should NOT include:
     # - User4's status (degree=0, private)
-    assert len(data["statuses"]) == 3
-    status_contents = {s["status_content"] for s in data["statuses"]}
+    assert len(data) == 3
+    status_contents = {s["status_content"] for s in data}
     assert "Status for all" in status_contents
     assert "Status for close friends" in status_contents
     assert "Status for friends of friends" in status_contents
@@ -1089,12 +1088,10 @@ def test_get_statuses_expired_filter(client, test_neo4j_session):
         "remaining_connections": 3,
         "is_verified": True,
         "invite_code": "ABCDE",
-        "status": {
-            "status_content": "Expired status",
-            "status_degree": 2,
-            "status_created_at": "2024-04-01T12:00:00",
-            "status_expired_at": "2024-04-02T12:00:00",  # Expired status
-        },
+        "status_content": "Expired status",
+        "status_degree": 2,
+        "status_created_at": "2024-04-01T12:00:00",
+        "status_expired_at": "2024-04-02T12:00:00",  # Expired status
     }
     util_create_user(mock_user, test_neo4j_session)
 
@@ -1104,4 +1101,4 @@ def test_get_statuses_expired_filter(client, test_neo4j_session):
     data = response.json()
 
     # Verify expired status is not returned
-    assert len(data["statuses"]) == 0
+    assert len(data) == 0

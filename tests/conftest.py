@@ -58,6 +58,12 @@ def neo4j_container():
         "7474:7474",  # HTTP port for browser/API
         "-e",
         "NEO4J_AUTH=none",  # Disable auth for testing
+        # Enable APOC by instructing Neo4j to install it as a labs plugin.
+        "-e",
+        'NEO4JLABS_PLUGINS=["apoc"]',
+        # Optional: allow unrestricted execution of APOC procedures.
+        "-e",
+        "dbms.security.procedures.unrestricted=apoc.*",
         "neo4j:latest",
     ]
 
@@ -165,6 +171,10 @@ def client(test_neo4j_session):
             "remaining_connections": 3,
             "is_verified": True,
             "invite_code": "ABCDE",
+            "status_content": "",
+            "status_degree": 0,
+            "status_created_at": "",
+            "status_expired_at": "",
         }
         return UserInDb(**data)
 

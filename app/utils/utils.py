@@ -1,6 +1,5 @@
 """Generic utility functions for the API."""
 
-
 from app.schemas.status import StatusInput
 
 

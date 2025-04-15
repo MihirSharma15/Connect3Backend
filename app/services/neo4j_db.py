@@ -6,7 +6,9 @@ General rule of thumb, all raw cypher queries get put in here
 """
 
 # external
+from collections import deque
 import datetime
+import logging
 from fastapi import HTTPException, Request
 from neo4j import Session
 from typing import Optional
@@ -19,11 +21,14 @@ from app.schemas.users import (
     GraphEdge,
     GraphResponse,
     MinimalUser,
+    MinimalUserWithStatus,
     UserConnections,
     UserInDb,
     UserPhonenumber,
 )
 from app.utils.utils import generate_five_alphanumeric_code
+
+logger = logging.getLogger(__name__)
 
 
 # HELPER METHODS
@@ -90,10 +95,10 @@ async def create_user_in_db(user: BaseUser, session: Session) -> UserInDb:
         "created_at": str(datetime.datetime.now()),
         "remaining_connections": 3,
         "invite_code": generate_five_alphanumeric_code(),
-        "status_content": user.status.status_content,
-        "status_degree": user.status.status_degree,
-        "status_created_at": str(datetime.datetime.now()),
-        "status_expired_at": str(datetime.datetime.now() + datetime.timedelta(days=1)),
+        "status_content": "",
+        "status_degree": 0,
+        "status_created_at": "",
+        "status_expired_at": "",
     }
 
     result = session.run(query, **params)
@@ -115,6 +120,11 @@ async def create_user_in_db(user: BaseUser, session: Session) -> UserInDb:
         remaining_connections=int(node.get("remaining_connections", 0)),
         is_verified=node.get("is_verified", False),
         invite_code=node.get("invite_code", ""),
+        status=MinimalStatus(
+            status_content=node.get("status_content", ""),
+            status_degree=node.get("status_degree", 0),
+            status_created_at=node.get("status_created_at", ""),
+        ),
     )
 
     return created_user
@@ -416,76 +426,103 @@ async def find_shortest_path(
 async def get_user_graph(
     user1: UserPhonenumber, session: Session, degrees: int = 6
 ) -> GraphResponse:
-    """Gets a user's graph database to a certain number of degrees. Assumed to be 6 in this case."""
-    degrees_int = int(degrees)  # Ensure it's an integer
+    """
+    Retrieves a user's graph up to the specified degree.
+    This version uses APOC to fetch the full subgraph (nodes and relationships)
+    and computes each node's degree (shortest distance from the starting user)
+    using a BFS in Python.
+    """
+    degrees_int = int(degrees)
     if degrees_int < 1:
-        raise ValueError
+        raise ValueError("Degrees must be at least 1.")
 
-    # Get the current user
+    # Ensure fast lookup by using an index on phonenumber.
     current_user = await get_user_in_db(user1.phonenumber, session)
     if not current_user:
         raise ValueError("Current user not found")
 
-    # Convert to MinimalUser with degree 0
-    current_user_data = current_user.model_dump()
-    current_user_data["degree"] = 0
-    current_user_data["phonenumber"] = None
-    current_user_minimal = MinimalUser(**current_user_data)
+    # Fetch the full subgraph (nodes and relationships) using APOC.
+    # Note: Ensure APOC is installed and enabled in your Neo4j instance.
+    query = """
+    MATCH (u:User {phonenumber: $phone})
+    CALL apoc.path.subgraphAll(u, {
+        relationshipFilter: "FRIENDS_WITH",
+        maxLevel: $maxLevel
+    }) YIELD nodes, relationships
+    RETURN nodes, relationships
+    """
+    result = session.run(query, phone=user1.phonenumber, maxLevel=degrees_int)
+    record = result.single()
+    if record is None:
+        return GraphResponse(nodes=[], edges=[])
 
-    # Initialize nodes_dict with current user
-    nodes_dict = {current_user_minimal.user_id: current_user_minimal}
+    nodes_raw = record["nodes"]
+    relationships_raw = record["relationships"]
+    logger.info(f"Nodes: {nodes_raw}")
+    logger.info(f"Relationships: {relationships_raw}")
+
+    # Build a dictionary of nodes keyed by their unique user_id.
+    # Also initialize each node's degree to None (to be computed below) and override phonenumber.
+    node_dict = {}
+    for node in nodes_raw:
+        user_id = node.get("user_id")
+        if user_id is None:
+            continue
+        node_data = dict(node)
+        node_data["degree"] = None  # Will be updated via BFS.
+        node_data["phonenumber"] = None  # Hide the phone if required.
+        node_dict[user_id] = MinimalUserWithStatus(
+            user_id=node_data["user_id"],
+            name=node_data["name"],
+            phonenumber=node_data["phonenumber"],
+            remaining_connections=node_data["remaining_connections"],
+            status=MinimalStatus(
+                status_content=(node_data["status_content"] or ""),
+                status_degree=(node_data["status_degree"] or 0),
+                status_created_at=(node_data["status_created_at"] or ""),
+            ),
+        )
+
+    # Create an undirected graph (adjacency list) from the relationships.
+    # This ensures that every edge is considered when computing degrees.
+    graph_adj = {node_id: set() for node_id in node_dict}
+    for rel in relationships_raw:
+        src = rel.start_node.get("user_id")
+        tgt = rel.end_node.get("user_id")
+        # Only add relationships if both endpoints exist in our node_dict.
+        if src in node_dict and tgt in node_dict:
+            graph_adj[src].add(tgt)
+            graph_adj[tgt].add(src)
+
+    # Use BFS to compute the degree (shortest distance) for each node.
+    start_node_id = current_user.user_id
+    queue = deque([(start_node_id, 0)])
+    visited = set()
+    while queue:
+        current, dist = queue.popleft()
+        if current in visited:
+            continue
+        visited.add(current)
+        # If the node is present in our dictionary, update its degree.
+        if current in node_dict:
+            node_dict[current].degree = dist
+        # Enqueue all unvisited neighbors with an incremented distance.
+        for neighbor in graph_adj.get(current, []):
+            if neighbor not in visited:
+                queue.append((neighbor, dist + 1))
+
+    # Process relationships to build the list of edges.
+    # We add an edge only if both endpoints are in our processed node dictionary.
     edges_set = set()
+    for rel in relationships_raw:
+        src = rel.start_node.get("user_id")
+        tgt = rel.end_node.get("user_id")
+        if src in node_dict and tgt in node_dict:
+            edges_set.add((src, tgt))
 
-    # Get connections if any exist
-    query = f"""
-    MATCH path = (user:User {{phonenumber: $phone}})-[:FRIENDS_WITH*1..{degrees_int}]-(other)
-    RETURN path, length(path) as degree ORDER BY degree ASC"""
-    result = session.run(query=query, phone=user1.phonenumber, degrees=degrees)
+    edges = [GraphEdge(source=src, target=tgt) for src, tgt in edges_set]
 
-    for record in result:
-        path = record["path"]
-        degree = record["degree"]
-        # Extract nodes
-        for node in path.nodes:
-            node_id = node.get("user_id")
-            if node_id not in nodes_dict:
-                node_data = dict(node)
-                node_data["degree"] = degree
-                node_data["phonenumber"] = None
-                
-                # Add status if it exists and meets degree requirements
-                status_data = node_data.get("status")
-                
-                if not status_data:
-                    node_data["status"] = None
-                    continue
-                
-                status_degree = status_data.get("status_degree", 0)
-                if status_degree <= degree:
-                    expired_at = status_data.get("status_expired_at")
-                    if not expired_at or datetime.datetime.fromisoformat(expired_at) <= datetime.datetime.now():
-                        node_data["status"] = None
-                    else:
-                        node_data["status"] = MinimalStatus(
-                            status_content=status_data.get("status_content", ""),
-                            status_degree=status_degree,
-                            status_created_at=status_data.get("status_created_at", ""),
-                            status_expired_at=status_data.get("status_expired_at", "")
-                        )
-                else:
-                    node_data["status"] = None
-                    
-                nodes_dict[node_id] = MinimalUser(**node_data)
-                
-        # Extract relationships as edges
-        for rel in path.relationships:
-            source_id = rel.start_node.get("user_id")
-            target_id = rel.end_node.get("user_id")
-            edges_set.add((source_id, target_id))
-
-    # Convert edge tuples to GraphEdge models
-    edges = [GraphEdge(source=src, target=target) for src, target in edges_set]
-    return GraphResponse(nodes=list(nodes_dict.values()), edges=edges)
+    return GraphResponse(nodes=list(node_dict.values()), edges=edges)
 
 
 async def get_user_status(user: UserPhonenumber, session: Session) -> MinimalStatus:
@@ -514,12 +551,10 @@ async def update_user_status(
     """Updates the status of a user in the db"""
     query = """
     MATCH (u:User {phonenumber: $phone})
-    SET u.status = {
-        status_content: $status_content,
-        status_degree: $status_degree,
-        status_created_at: $status_created_at,
-        status_expired_at: $status_expired_at
-    }
+    SET u.status_content = $status_content,
+        u.status_degree = $status_degree,
+        u.status_created_at = $status_created_at,
+        u.status_expired_at = $status_expired_at
     RETURN u
     """
 
