@@ -122,7 +122,7 @@ async def create_user_in_db(user: BaseUser, session: Session) -> UserInDb:
         invite_code=node.get("invite_code", ""),
         status=MinimalStatus(
             status_content=node.get("status_content", ""),
-            status_degree=node.get("status_degree", 0),
+            status_degree=int(node.get("status_degree", 0)),
             status_created_at=node.get("status_created_at", ""),
         ),
     )
@@ -158,7 +158,7 @@ async def get_user_in_db(phonenumber: str, session: Session) -> Optional[UserInD
         invite_code=(node["invite_code"] or ""),
         status=MinimalStatus(
             status_content=node["status_content"],
-            status_degree=node["status_degree"],
+            status_degree=(node["status_degree"] or 0),
             status_created_at=node["status_created_at"],
         ),
     )  # invite_code may not exist for all users
@@ -194,7 +194,7 @@ async def get_user_in_db_by_id(user_id: str, session: Session) -> Optional[UserI
         invite_code=node["invite_code"] or "",
         status=MinimalStatus(
             status_content=(node["status_content"] or ""),
-            status_degree=(node["status_degree"] or ""),
+            status_degree=(node["status_degree"] or 0),
             status_created_at=(node["status_created_at"] or ""),
         ),
     )  # invite_code may not exist for all users
@@ -238,7 +238,7 @@ async def find_user_by_invite_code(
         invite_code=node["invite_code"] or "",
         status=MinimalStatus(
             status_content=(node["status_content"] or ""),
-            status_degree=(node["status_degree"] or ""),
+            status_degree=int((node["status_degree"] or 0)),
             status_created_at=(node["status_created_at"] or ""),
         ),
     )  # invite_code may not exist for all users
@@ -458,8 +458,6 @@ async def get_user_graph(
 
     nodes_raw = record["nodes"]
     relationships_raw = record["relationships"]
-    logger.info(f"Nodes: {nodes_raw}")
-    logger.info(f"Relationships: {relationships_raw}")
 
     # Build a dictionary of nodes keyed by their unique user_id.
     # Also initialize each node's degree to None (to be computed below) and override phonenumber.
@@ -471,6 +469,8 @@ async def get_user_graph(
         node_data = dict(node)
         node_data["degree"] = None  # Will be updated via BFS.
         node_data["phonenumber"] = None  # Hide the phone if required.
+        
+        # Initially create all nodes with their data, we'll filter statuses later
         node_dict[user_id] = MinimalUserWithStatus(
             user_id=node_data["user_id"],
             name=node_data["name"],
@@ -478,7 +478,7 @@ async def get_user_graph(
             remaining_connections=node_data["remaining_connections"],
             status=MinimalStatus(
                 status_content=(node_data["status_content"] or ""),
-                status_degree=(node_data["status_degree"] or 0),
+                status_degree=int(node_data["status_degree"] or 0),
                 status_created_at=(node_data["status_created_at"] or ""),
             ),
         )
@@ -511,6 +511,32 @@ async def get_user_graph(
             if neighbor not in visited:
                 queue.append((neighbor, dist + 1))
 
+    # Now filter statuses based on degree restrictions
+    for node_id, node in node_dict.items():
+        # Get the node's distance from the current user
+        node_degree = node.degree
+        
+        # Check for expired status (older than 24 hours)
+        if node.status and node.status.status_created_at and node.status.status_content:
+            try:
+                status_time = datetime.datetime.fromisoformat(node.status.status_created_at)
+                current_time = datetime.datetime.now()
+                # If status is older than 24 hours, set it to None
+                if (current_time - status_time).total_seconds() > 24 * 60 * 60:
+                    node.status = None
+                    continue  # Skip degree check if already filtered out
+            except (ValueError, TypeError):
+                # If we can't parse the timestamp, continue with degree checks
+                pass
+        
+        # Get the status degree restriction
+        if node.status and hasattr(node.status, 'status_degree'):
+            status_degree = node.status.status_degree
+            
+            # If node's distance is greater than status degree, set status to None
+            if node_degree is not None and status_degree is not None and node_degree > status_degree:
+                node.status = None
+
     # Process relationships to build the list of edges.
     # We add an edge only if both endpoints are in our processed node dictionary.
     edges_set = set()
@@ -542,7 +568,7 @@ async def get_user_status(user: UserPhonenumber, session: Session) -> MinimalSta
             status_created_at=record["status_created_at"],
         )
     except ValueError:
-        raise
+        raise ValueError("User not found")
 
 
 async def update_user_status(
