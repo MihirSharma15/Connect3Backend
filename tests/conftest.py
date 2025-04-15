@@ -59,6 +59,12 @@ def neo4j_container():
         "7474:7474",  # HTTP port for browser/API
         "-e",
         "NEO4J_AUTH=none",  # Disable auth for testing
+        # Enable APOC by instructing Neo4j to install it as a labs plugin.
+        "-e",
+        'NEO4JLABS_PLUGINS=["apoc"]',
+        # Optional: allow unrestricted execution of APOC procedures.
+        "-e",
+        "dbms.security.procedures.unrestricted=apoc.*",
         "neo4j:latest",
     ]
 
