@@ -3,6 +3,7 @@ from typing import List, Optional, Union
 
 # internal
 from app.schemas.auth import Token
+from app.schemas.status import MinimalStatus
 from app.schemas.usphonenumber import USPhoneNumber
 
 
@@ -11,6 +12,7 @@ class BaseUser(BaseModel):
     name: Optional[str] = str
     phonenumber: USPhoneNumber
     hashed_password: Optional[str] = str
+    status: Optional[MinimalStatus] = None
 
 
 class UserPhonenumber(BaseModel):
@@ -52,6 +54,7 @@ class UserInDb(BaseModel):
     remaining_connections: int
     is_verified: bool
     invite_code: str
+    status: Optional[MinimalStatus] = None
 
 
 class MinimalUser(BaseModel):
@@ -64,6 +67,7 @@ class MinimalUser(BaseModel):
     )
     degree: Optional[int] = None
     remaining_connections: Optional[int] = None
+    status: Optional[MinimalStatus] = None
 
 
 class UserConnections(BaseModel):

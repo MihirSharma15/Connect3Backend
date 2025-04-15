@@ -211,7 +211,6 @@ def test_create_connection_route_invalid_phone(client, test_neo4j_session):
     assert True == True
 
 
-# DOESN'T WORK - something is wrong with the API logic. It's givng and empty server error too which isn't helpful. Could be the fact that this is a json instead of a query
 def test_users_connect_by_code(client, test_neo4j_session):
     """Test for connecting users with connection code."""
     current_user = {
@@ -912,6 +911,197 @@ def test_graph_user_no_connections(client, test_neo4j_session):
     assert len(data["nodes"]) == 1
     assert data["nodes"][0]["user_id"] == current_user["user_id"]
     assert data["nodes"][0]["name"] == current_user["name"]
-    
+
     # Verify no edges exist
     assert len(data["edges"]) == 0
+
+
+def test_update_user_status_success(client, test_neo4j_session):
+    """Test successful update of a user's status"""
+    # Create a test user
+    mock_user = {
+        "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d2",
+        "name": "John Doe",
+        "phonenumber": "+19999999999",
+        "hashed_password": "fakehashedpassword",
+        "created_at": "1-1-1970",
+        "remaining_connections": 3,
+        "is_verified": True,
+        "invite_code": "ABCDE",
+    }
+    util_create_user(mock_user, test_neo4j_session)
+
+    # Update status
+    status_data = {
+        "status_content": "Feeling great today!",
+        "status_degree": 2,
+        "status_created_at": "2024-04-15T12:00:00",
+        "status_expired_at": "2024-04-16T12:00:00",
+    }
+    response = client.post("/users/status", json=status_data)
+    assert response.status_code == 200
+
+    # Verify status was updated
+    data = response.json()
+    assert data["status"]["status_content"] == status_data["status_content"]
+    assert data["status"]["status_degree"] == status_data["status_degree"]
+    assert data["status"]["status_created_at"] == status_data["status_created_at"]
+    assert data["status"]["status_expired_at"] == status_data["status_expired_at"]
+
+
+def test_update_user_status_invalid_degree(client, test_neo4j_session):
+    """Test status update with invalid degree value"""
+    # Create a test user
+    mock_user = {
+        "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d2",
+        "name": "John Doe",
+        "phonenumber": "+19999999999",
+        "hashed_password": "fakehashedpassword",
+        "created_at": "1-1-1970",
+        "remaining_connections": 3,
+        "is_verified": True,
+        "invite_code": "ABCDE",
+    }
+    util_create_user(mock_user, test_neo4j_session)
+
+    # Try to update status with negative degree
+    status_data = {
+        "status_content": "Invalid status",
+        "status_degree": -1,
+        "status_created_at": "2024-04-15T12:00:00",
+        "status_expired_at": "2024-04-16T12:00:00",
+    }
+    response = client.post("/users/status", json=status_data)
+    assert response.status_code == 400
+    assert "status_degree" in response.json()["detail"]
+
+
+def test_get_statuses_with_degree_filter(client, test_neo4j_session):
+    """Test getting statuses with degree filtering"""
+    # Create a chain of users: U1 -> U2 -> U3 -> U4
+    users = [
+        {
+            "user_id": "user1",
+            "name": "User1",
+            "phonenumber": "+19999999991",
+            "hashed_password": "fakehashedpassword",
+            "created_at": "1-1-1970",
+            "remaining_connections": 3,
+            "is_verified": True,
+            "invite_code": "CODE1",
+            "status": {
+                "status_content": "Status for all",
+                "status_degree": 3,
+                "status_created_at": "2024-04-15T12:00:00",
+                "status_expired_at": "2024-04-16T12:00:00",
+            },
+        },
+        {
+            "user_id": "user2",
+            "name": "User2",
+            "phonenumber": "+19999999992",
+            "hashed_password": "fakehashedpassword",
+            "created_at": "1-1-1970",
+            "remaining_connections": 3,
+            "is_verified": True,
+            "invite_code": "CODE2",
+            "status": {
+                "status_content": "Status for close friends",
+                "status_degree": 1,
+                "status_created_at": "2024-04-15T12:00:00",
+                "status_expired_at": "2024-04-16T12:00:00",
+            },
+        },
+        {
+            "user_id": "user3",
+            "name": "User3",
+            "phonenumber": "+19999999993",
+            "hashed_password": "fakehashedpassword",
+            "created_at": "1-1-1970",
+            "remaining_connections": 3,
+            "is_verified": True,
+            "invite_code": "CODE3",
+            "status": {
+                "status_content": "Status for friends of friends",
+                "status_degree": 2,
+                "status_created_at": "2024-04-15T12:00:00",
+                "status_expired_at": "2024-04-16T12:00:00",
+            },
+        },
+        {
+            "user_id": "user4",
+            "name": "User4",
+            "phonenumber": "+19999999994",
+            "hashed_password": "fakehashedpassword",
+            "created_at": "1-1-1970",
+            "remaining_connections": 3,
+            "is_verified": True,
+            "invite_code": "CODE4",
+            "status": {
+                "status_content": "Private status",
+                "status_degree": 0,
+                "status_created_at": "2024-04-15T12:00:00",
+                "status_expired_at": "2024-04-16T12:00:00",
+            },
+        },
+    ]
+
+    # Create users and connections
+    user_objects = []
+    for user_data in users:
+        util_create_user(user_data, test_neo4j_session)
+        user_objects.append(UserInDb(**user_data))
+
+    # Create connections
+    util_create_connection(user_objects[0], user_objects[1], test_neo4j_session)
+    util_create_connection(user_objects[1], user_objects[2], test_neo4j_session)
+    util_create_connection(user_objects[2], user_objects[3], test_neo4j_session)
+
+    # Get statuses with degree=2
+    response = client.get("/users/status", params={"degree": 2})
+    assert response.status_code == 200
+    data = response.json()
+
+    # Verify we get statuses from users within 2 degrees
+    # Should include:
+    # - User1's status (degree=3, but we're within 2 degrees)
+    # - User2's status (degree=1, we're within 1 degree)
+    # - User3's status (degree=2, we're within 2 degrees)
+    # Should NOT include:
+    # - User4's status (degree=0, private)
+    assert len(data["statuses"]) == 3
+    status_contents = {s["status_content"] for s in data["statuses"]}
+    assert "Status for all" in status_contents
+    assert "Status for close friends" in status_contents
+    assert "Status for friends of friends" in status_contents
+    assert "Private status" not in status_contents
+
+
+def test_get_statuses_expired_filter(client, test_neo4j_session):
+    """Test that expired statuses are not returned"""
+    # Create a test user
+    mock_user = {
+        "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d2",
+        "name": "John Doe",
+        "phonenumber": "+19999999999",
+        "hashed_password": "fakehashedpassword",
+        "created_at": "1-1-1970",
+        "remaining_connections": 3,
+        "is_verified": True,
+        "invite_code": "ABCDE",
+        "status": {
+            "status_content": "Expired status",
+            "status_degree": 2,
+            "status_created_at": "2024-04-01T12:00:00",
+            "status_expired_at": "2024-04-02T12:00:00",  # Expired status
+        },
+    }
+    util_create_user(mock_user, test_neo4j_session)
+
+    # Get statuses
+    response = client.get("/users/status", params={"degree": 2})
+    assert response.status_code == 200
+    data = response.json()
+
+    # Verify expired status is not returned
+    assert len(data["statuses"]) == 0
