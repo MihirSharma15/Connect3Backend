@@ -7,7 +7,6 @@ General rule of thumb, all raw cypher queries get put in here
 
 # external
 from collections import deque
-from collections import deque
 import datetime
 import logging
 from fastapi import HTTPException, Request
@@ -470,7 +469,7 @@ async def get_user_graph(
         node_data = dict(node)
         node_data["degree"] = None  # Will be updated via BFS.
         node_data["phonenumber"] = None  # Hide the phone if required.
-        
+
         # Initially create all nodes with their data, we'll filter statuses later
         node_dict[user_id] = MinimalUserWithStatus(
             user_id=node_data["user_id"],
@@ -516,11 +515,13 @@ async def get_user_graph(
     for node_id, node in node_dict.items():
         # Get the node's distance from the current user
         node_degree = node.degree
-        
+
         # Check for expired status (older than 24 hours)
         if node.status and node.status.status_created_at and node.status.status_content:
             try:
-                status_time = datetime.datetime.fromisoformat(node.status.status_created_at)
+                status_time = datetime.datetime.fromisoformat(
+                    node.status.status_created_at
+                )
                 current_time = datetime.datetime.now()
                 # If status is older than 24 hours, set it to None
                 if (current_time - status_time).total_seconds() > 24 * 60 * 60:
@@ -529,13 +530,17 @@ async def get_user_graph(
             except (ValueError, TypeError):
                 # If we can't parse the timestamp, continue with degree checks
                 pass
-        
+
         # Get the status degree restriction
-        if node.status and hasattr(node.status, 'status_degree'):
+        if node.status and hasattr(node.status, "status_degree"):
             status_degree = node.status.status_degree
-            
+
             # If node's distance is greater than status degree, set status to None
-            if node_degree is not None and status_degree is not None and node_degree > status_degree:
+            if (
+                node_degree is not None
+                and status_degree is not None
+                and node_degree > status_degree
+            ):
                 node.status = None
 
     # Process relationships to build the list of edges.

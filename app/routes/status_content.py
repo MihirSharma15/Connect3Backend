@@ -22,9 +22,7 @@ async def update_status_route(
     """Updates the status of the current user"""
     try:
         if status.status_degree is None or status.status_degree <= 0:
-            raise HTTPException(
-                status_code=400, detail="Degree must be greater than 0"
-            )
+            raise HTTPException(status_code=400, detail="Degree must be greater than 0")
         user_phonenumber = UserPhonenumber(phonenumber=current_user.phonenumber)
         await update_user_status(user_phonenumber, status, session)
     except HTTPException as e:

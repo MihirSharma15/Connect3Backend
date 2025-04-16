@@ -5,11 +5,21 @@ from neo4j import GraphDatabase
 from twilio.rest import Client
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+import sentry_sdk
+
 
 # internal
 from app.core.config import settings
 from app.routes import auth, status_content, users
 from app.services.neo4j_db import get_neo4j_driver
+
+
+sentry_sdk.init(
+    dsn="https://c84ec26ef2ff26b260edeedd9f3799eb@o4509161088548864.ingest.us.sentry.io/4509161089794048",
+    # Add data like request headers and IP for users,
+    # see https://docs.sentry.io/platforms/python/data-management/data-collected/ for more info
+    send_default_pii=True,
+)
 
 
 @asynccontextmanager
@@ -72,3 +82,7 @@ async def health(db: Annotated[GraphDatabase, Depends(get_neo4j_driver)]):
         )
 
     return {"fastapi": "ok", "neo4j_db": db_status}
+
+@app.get("/sentry-debug")
+async def trigger_error():
+    division_by_zero = 1 / 0

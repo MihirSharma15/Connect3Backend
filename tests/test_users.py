@@ -306,7 +306,7 @@ def test_graph_user(client, test_neo4j_session):
     assert data["edges"][0]["target"] == mock_response["edges"][0]["target"]
     assert data["nodes"][0]["user_id"] == mock_response["nodes"][0]["user_id"]
     assert data["nodes"][0]["name"] == mock_response["nodes"][0]["name"]
-    
+
     # Verify presence of status fields without checking specific values
     assert "status" in data["nodes"][0]
 
@@ -953,7 +953,7 @@ def test_graph_user_no_connections(client, test_neo4j_session):
     assert len(data["nodes"]) == 1
     assert data["nodes"][0]["user_id"] == current_user["user_id"]
     assert data["nodes"][0]["name"] == current_user["name"]
-    
+
     # Verify status is present
     assert "status" in data["nodes"][0]
 
@@ -1020,14 +1020,14 @@ def test_update_user_status_invalid_degree(client, test_neo4j_session):
 def test_graph_user_status_degree_filtering(client, test_neo4j_session):
     """
     Test that statuses are properly filtered based on their degree setting.
-    
+
     This test creates a chain of users:
     U1 -> U2 -> U3 -> U4
-    
+
     Where:
     - U1 is the current user
     - U4 has a status with degree=2
-    
+
     When U1 requests a graph with degree=3, they should:
     - See U4 as a node (since U4 is within 3 degrees)
     - NOT see U4's status (since it's set to be visible only up to 2 degrees away)
@@ -1036,7 +1036,7 @@ def test_graph_user_status_degree_filtering(client, test_neo4j_session):
     now = datetime.datetime.now()
     fresh_timestamp = now.isoformat()
     future_expiry = (now + datetime.timedelta(hours=23)).isoformat()
-    
+
     # Create a chain of users
     user_1_data = {
         "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d2",  # Current user
@@ -1052,7 +1052,7 @@ def test_graph_user_status_degree_filtering(client, test_neo4j_session):
         "status_created_at": fresh_timestamp,
         "status_expired_at": future_expiry,
     }
-    
+
     user_2_data = {
         "user_id": "user2-id",
         "name": "User 2",
@@ -1067,7 +1067,7 @@ def test_graph_user_status_degree_filtering(client, test_neo4j_session):
         "status_created_at": fresh_timestamp,
         "status_expired_at": future_expiry,
     }
-    
+
     user_3_data = {
         "user_id": "user3-id",
         "name": "User 3",
@@ -1082,7 +1082,7 @@ def test_graph_user_status_degree_filtering(client, test_neo4j_session):
         "status_created_at": fresh_timestamp,
         "status_expired_at": future_expiry,
     }
-    
+
     user_4_data = {
         "user_id": "user4-id",
         "name": "User 4",
@@ -1097,47 +1097,70 @@ def test_graph_user_status_degree_filtering(client, test_neo4j_session):
         "status_created_at": fresh_timestamp,
         "status_expired_at": future_expiry,
     }
-    
+
     # Create users in DB
     util_create_user(user_1_data, test_neo4j_session)
     util_create_user(user_2_data, test_neo4j_session)
     util_create_user(user_3_data, test_neo4j_session)
     util_create_user(user_4_data, test_neo4j_session)
-    
+
     # Convert to UserInDb objects for creating connections
     user_1 = UserInDb(**user_1_data)
     user_2 = UserInDb(**user_2_data)
     user_3 = UserInDb(**user_3_data)
     user_4 = UserInDb(**user_4_data)
-    
+
     # Create connections forming a chain: U1 -> U2 -> U3 -> U4
     util_create_connection(user_1, user_2, test_neo4j_session)
     util_create_connection(user_2, user_3, test_neo4j_session)
     util_create_connection(user_3, user_4, test_neo4j_session)
-    
+
     # Request graph with degree=3 (should include all users)
     response = client.get("/users/graph", params={"degrees": 3})
     assert response.status_code == 200
     graph_data = response.json()
-    
+
     # Verify all users are in the graph
     user_ids = {node["user_id"] for node in graph_data["nodes"]}
     assert user_1_data["user_id"] in user_ids
     assert user_2_data["user_id"] in user_ids
     assert user_3_data["user_id"] in user_ids
     assert user_4_data["user_id"] in user_ids
-    
+
     # Find user 4 in the response
-    user4_node = next((node for node in graph_data["nodes"] if node["user_id"] == user_4_data["user_id"]), None)
+    user4_node = next(
+        (
+            node
+            for node in graph_data["nodes"]
+            if node["user_id"] == user_4_data["user_id"]
+        ),
+        None,
+    )
     assert user4_node is not None
-    
+
     # Key test: User 4's status should NOT be visible since its degree=2 and we're 3 degrees away
-    assert user4_node["status"] is None, "User 4's status should be filtered out due to degree restriction"
-    
+    assert user4_node["status"] is None, (
+        "User 4's status should be filtered out due to degree restriction"
+    )
+
     # But closer users' statuses should be visible
-    user2_node = next((node for node in graph_data["nodes"] if node["user_id"] == user_2_data["user_id"]), None)
-    user3_node = next((node for node in graph_data["nodes"] if node["user_id"] == user_3_data["user_id"]), None)
-    
+    user2_node = next(
+        (
+            node
+            for node in graph_data["nodes"]
+            if node["user_id"] == user_2_data["user_id"]
+        ),
+        None,
+    )
+    user3_node = next(
+        (
+            node
+            for node in graph_data["nodes"]
+            if node["user_id"] == user_3_data["user_id"]
+        ),
+        None,
+    )
+
     assert user2_node["status"] is not None, "User 2's status should be visible"
     assert user3_node["status"] is not None, "User 3's status should be visible"
 
@@ -1145,7 +1168,7 @@ def test_graph_user_status_degree_filtering(client, test_neo4j_session):
 def test_graph_user_expired_status_filtering(client, test_neo4j_session):
     """
     Test that expired statuses (older than 24 hours) are filtered out properly.
-    
+
     Creates a user with an old status and verifies it's not visible in the graph.
     """
     # Get current timestamp and create timestamps for testing
@@ -1153,7 +1176,7 @@ def test_graph_user_expired_status_filtering(client, test_neo4j_session):
     old_timestamp = (now - datetime.timedelta(hours=25)).isoformat()
     fresh_timestamp = now.isoformat()
     future_expiry = (now + datetime.timedelta(hours=23)).isoformat()
-    
+
     # Create current user with an expired status
     current_user = {
         "user_id": "db5d23a7-c5b8-4ec1-be46-2028a30261d2",  # Current user
@@ -1169,7 +1192,7 @@ def test_graph_user_expired_status_filtering(client, test_neo4j_session):
         "status_created_at": old_timestamp,
         "status_expired_at": (now - datetime.timedelta(hours=1)).isoformat(),
     }
-    
+
     # Create a connected user with a fresh status
     connected_user = {
         "user_id": "fresh-status-user-id",  # Different user ID
@@ -1185,36 +1208,51 @@ def test_graph_user_expired_status_filtering(client, test_neo4j_session):
         "status_created_at": fresh_timestamp,
         "status_expired_at": future_expiry,
     }
-    
+
     # Create users in DB
     util_create_user(current_user, test_neo4j_session)
     util_create_user(connected_user, test_neo4j_session)
-    
+
     # Connect the users
     user_1 = UserInDb(**current_user)
     user_2 = UserInDb(**connected_user)
     util_create_connection(user_1, user_2, test_neo4j_session)
-    
+
     # Request graph
     response = client.get("/users/graph", params={"degrees": 1})
     assert response.status_code == 200
     graph_data = response.json()
-    
+
     # Verify nodes exist
     user_ids = {node["user_id"] for node in graph_data["nodes"]}
     assert current_user["user_id"] in user_ids
     assert connected_user["user_id"] in user_ids
-    
+
     # Find current user in the response
-    current_user_node = next((node for node in graph_data["nodes"] if node["user_id"] == current_user["user_id"]), None)
+    current_user_node = next(
+        (
+            node
+            for node in graph_data["nodes"]
+            if node["user_id"] == current_user["user_id"]
+        ),
+        None,
+    )
     assert current_user_node is not None
-    
+
     # Key test: Current user's status should be filtered out due to age
     assert current_user_node["status"] is None, "Expired status should be filtered out"
-    
+
     # Connected user's status should be visible
-    connected_user_node = next((node for node in graph_data["nodes"] if node["user_id"] == connected_user["user_id"]), None)
+    connected_user_node = next(
+        (
+            node
+            for node in graph_data["nodes"]
+            if node["user_id"] == connected_user["user_id"]
+        ),
+        None,
+    )
     assert connected_user_node["status"] is not None, "Fresh status should be visible"
-    assert connected_user_node["status"]["status_content"] == connected_user["status_content"]
-
-
+    assert (
+        connected_user_node["status"]["status_content"]
+        == connected_user["status_content"]
+    )
