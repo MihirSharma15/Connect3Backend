@@ -170,20 +170,18 @@ async def signup_user_route(
         await reduce_connection_count(inviting_user_phonenumber)
 
         # once we have created a connection between two users, we want to send an SMS to the user
-        send_sms(
-            f"{inviting_user.name} has accepted your request to join Connect3! Go to Connect3.live to see UNC's social graph expand.",
-            to=inviting_user_phonenumber,
-            client=twilio_client,
-        )
+        # send_sms(
+        #     f"{inviting_user.name} has accepted your request to join Connect3! Go to Connect3.live to see UNC's social graph expand.",
+        #     to=inviting_user_phonenumber,
+        #     client=twilio_client,
+        # )
         return created_user
 
     except HTTPException as e:
         logger.exception(
             f"User {user_phonenumber.phonenumber} signup failed: {e}", stack_info=True
         )
-        raise HTTPException(
-            status_code=e.status_code, detail=" Signup failed. Please try again later"
-        )
+        raise
     except Exception as e:
         logger.exception(
             f"Unexepected error in signup of {user.phonenumber}: {e}", stack_info=True
